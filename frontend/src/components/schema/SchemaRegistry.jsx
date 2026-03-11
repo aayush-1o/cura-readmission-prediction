@@ -17,7 +17,7 @@ import {
     ChevronDown, ChevronUp, AlertTriangle, CheckCircle, XCircle,
     Database, Code2, RefreshCw, Diff,
 } from 'lucide-react';
-import schemaData from '../data/schema_data.json';
+import schemaData from "../../data/schema_data.json";
 
 /* ─── Static migration data (matches 013_schema_migrations.sql seed) ──────── */
 const MIGRATIONS = [
