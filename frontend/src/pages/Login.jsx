@@ -1,209 +1,231 @@
 import { useState } from 'react';
-import { Navigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { Eye, EyeOff, Loader2 } from 'lucide-react';
-import { useAuth } from '../hooks/useAuth.jsx';
+import { useNavigate } from 'react-router-dom';
+import { toast } from 'react-hot-toast';
+
+const DEMO_CREDENTIALS = {
+    Clinician:   { email: 'dr.chen@hospital.org',    password: 'demo' },
+    Analyst:     { email: 'analyst@hospital.org',    password: 'demo' },
+    'Care Coord.': { email: 'coord@hospital.org',    password: 'demo' },
+    Admin:       { email: 'admin@hospital.org',      password: 'demo' },
+};
 
 export default function Login() {
-    const { login, isAuthenticated } = useAuth();
+    const navigate = useNavigate();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [showPw, setShowPw] = useState(false);
     const [loading, setLoading] = useState(false);
 
-    if (isAuthenticated) return <Navigate to="/dashboard" replace />;
-
-    const handleSubmit = async (e) => {
+    const handleLogin = async (e) => {
         e.preventDefault();
-        if (!email || !password) return;
         setLoading(true);
-        await login(email, password);
+        await new Promise((r) => setTimeout(r, 600));
         setLoading(false);
+        navigate('/');
     };
 
-    // Quick-fill demo credentials
-    const fillDemo = (role) => {
-        const CREDS = {
-            clinician: { email: 'clinician@careiq.io', pw: 'CareIQ-Demo-2024!' },
-            analyst: { email: 'analyst@careiq.io', pw: 'CareIQ-Demo-2024!' },
-            coordinator: { email: 'coordinator@careiq.io', pw: 'CareIQ-Demo-2024!' },
-            admin: { email: 'admin@careiq.io', pw: 'CareIQ-Admin-2024!' },
-        };
-        const c = CREDS[role];
-        if (c) { setEmail(c.email); setPassword(c.pw); }
+    const loginAsDemo = async (role) => {
+        const creds = DEMO_CREDENTIALS[role];
+        setLoading(true);
+        await new Promise((r) => setTimeout(r, 400));
+        setLoading(false);
+        toast.success(`Signed in as ${role} (demo)`);
+        navigate('/');
     };
 
     return (
-        <div
-            className="min-h-screen flex items-center justify-center p-6 relative overflow-hidden"
-            style={{ background: '#0A0F1C' }}
-        >
-            {/* Animated mesh gradient background */}
-            <div
-                className="absolute inset-0 opacity-30"
-                style={{
-                    background: 'radial-gradient(ellipse 80% 50% at 20% 40%, rgba(0,212,255,0.15) 0%, transparent 60%), radial-gradient(ellipse 60% 60% at 80% 70%, rgba(59,130,246,0.10) 0%, transparent 60%), radial-gradient(ellipse 50% 50% at 50% 10%, rgba(16,185,129,0.08) 0%, transparent 50%)',
-                    animation: 'none',
-                }}
-            />
-
-            {/* Subtle grid overlay */}
-            <div
-                className="absolute inset-0 opacity-10"
-                style={{
-                    backgroundImage: 'linear-gradient(#1F2937 1px, transparent 1px), linear-gradient(90deg, #1F2937 1px, transparent 1px)',
+        <div style={{
+            minHeight: '100vh',
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            background: 'var(--bg-base)',
+        }}>
+            {/* ── LEFT: decorative indigo panel ─────────────────────── */}
+            <div style={{
+                background: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 50%, #4F46E5 100%)',
+                padding: 48,
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                position: 'relative',
+                overflow: 'hidden',
+            }}>
+                {/* Grid pattern overlay */}
+                <div style={{
+                    position: 'absolute', inset: 0, opacity: 0.08,
+                    backgroundImage: 'linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px)',
                     backgroundSize: '40px 40px',
-                }}
-            />
+                    pointerEvents: 'none',
+                }} />
 
-            {/* Login card */}
-            <motion.div
-                initial={{ opacity: 0, y: 24 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, ease: 'easeOut' }}
-                className="relative w-full max-w-md"
-            >
-                <div
-                    style={{
-                        background: 'rgba(17,24,39,0.95)',
-                        border: '1px solid #1F2937',
-                        borderRadius: '16px',
-                        padding: '40px',
-                        boxShadow: '0 24px 64px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.03)',
-                        backdropFilter: 'blur(20px)',
-                    }}
-                >
-                    {/* Logo + tagline */}
-                    <div className="flex flex-col items-center mb-8">
-                        <div
-                            className="w-12 h-12 rounded-xl flex items-center justify-center mb-4"
-                            style={{
-                                background: 'rgba(0,212,255,0.1)',
-                                border: '1px solid rgba(0,212,255,0.3)',
-                                boxShadow: '0 0 20px rgba(0,212,255,0.2)',
-                            }}
-                        >
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                                <polyline points="2,12 6,12 8,4 11,20 14,7 17,15 19,12 22,12" stroke="#00D4FF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
-                        </div>
-                        <h1
-                            style={{ fontFamily: '"DM Sans", sans-serif', fontWeight: 800, fontSize: '24px', color: '#F9FAFB', marginBottom: '4px' }}
-                        >
+                {/* Logo */}
+                <div style={{ position: 'relative' }}>
+                    <div style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 10,
+                        background: 'rgba(255,255,255,0.15)',
+                        backdropFilter: 'blur(10px)',
+                        border: '1px solid rgba(255,255,255,0.2)',
+                        borderRadius: 'var(--radius-lg)',
+                        padding: '10px 16px',
+                    }}>
+                        <div style={{ width: 10, height: 10, background: 'white', borderRadius: 2 }} />
+                        <span style={{
+                            color: 'white',
+                            fontWeight: 700,
+                            fontSize: 16,
+                            fontFamily: "'Instrument Sans', sans-serif",
+                        }}>
                             CareIQ
-                        </h1>
-                        <p style={{ fontSize: '13px', color: '#9CA3AF', letterSpacing: '0.05em' }}>
-                            Predict. Prevent. Personalize.
-                        </p>
+                        </span>
                     </div>
+                </div>
 
-                    <form onSubmit={handleSubmit} className="space-y-4">
+                {/* Headline */}
+                <div style={{ position: 'relative' }}>
+                    <h2 style={{
+                        fontFamily: "'Instrument Serif', serif",
+                        fontSize: 38,
+                        fontWeight: 400,
+                        color: 'white',
+                        lineHeight: 1.2,
+                        marginBottom: 16,
+                        letterSpacing: '-0.02em',
+                    }}>
+                        Predict risk.<br />
+                        Prevent readmission.<br />
+                        Personalize care.
+                    </h2>
+                    <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.75)', lineHeight: 1.7 }}>
+                        Clinical intelligence for the teams that can't afford to miss a high-risk patient.
+                    </p>
+                </div>
+
+                {/* Stats row */}
+                <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(3,1fr)',
+                    gap: 1,
+                    background: 'rgba(255,255,255,0.1)',
+                    borderRadius: 'var(--radius-md)',
+                    overflow: 'hidden',
+                    position: 'relative',
+                }}>
+                    {[
+                        { value: '84%', label: 'AUC-ROC'    },
+                        { value: '50k', label: 'Admissions'  },
+                        { value: '<1s', label: 'Inference'   },
+                    ].map((s) => (
+                        <div key={s.label} style={{ padding: 14, textAlign: 'center' }}>
+                            <p style={{
+                                fontFamily: "'DM Mono', monospace",
+                                fontSize: 22, fontWeight: 600,
+                                color: 'white', lineHeight: 1,
+                            }}>
+                                {s.value}
+                            </p>
+                            <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', marginTop: 4 }}>
+                                {s.label}
+                            </p>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* ── RIGHT: form ───────────────────────────────────────── */}
+            <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: 48,
+            }}>
+                <div style={{ width: '100%', maxWidth: 380 }}>
+                    <h1 style={{
+                        fontFamily: "'Instrument Serif', serif",
+                        fontSize: 28,
+                        fontWeight: 400,
+                        color: 'var(--text-primary)',
+                        marginBottom: 6,
+                        letterSpacing: '-0.01em',
+                    }}>
+                        Welcome back
+                    </h1>
+                    <p className="t-body" style={{ color: 'var(--text-muted)', marginBottom: 28 }}>
+                        Sign in to your CareIQ workspace
+                    </p>
+
+                    <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                         {/* Email */}
                         <div>
-                            <label
-                                htmlFor="email"
-                                style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#9CA3AF', marginBottom: '6px', letterSpacing: '0.04em', textTransform: 'uppercase' }}
-                            >
-                                Email Address
+                            <label className="t-label" style={{ display: 'block', marginBottom: 6 }}>
+                                Email address
                             </label>
                             <input
-                                id="email"
+                                className="input"
                                 type="email"
-                                autoComplete="email"
+                                placeholder="dr.chen@hospital.org"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
-                                className="input"
-                                placeholder="clinician@hospital.org"
-                                required
                             />
                         </div>
 
                         {/* Password */}
                         <div>
-                            <label
-                                htmlFor="password"
-                                style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#9CA3AF', marginBottom: '6px', letterSpacing: '0.04em', textTransform: 'uppercase' }}
-                            >
+                            <label className="t-label" style={{ display: 'block', marginBottom: 6 }}>
                                 Password
                             </label>
-                            <div className="relative">
-                                <input
-                                    id="password"
-                                    type={showPw ? 'text' : 'password'}
-                                    autoComplete="current-password"
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    className="input pr-10"
-                                    placeholder="••••••••••"
-                                    required
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => setShowPw(!showPw)}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2"
-                                    style={{ color: '#4B5563', transition: 'color 150ms' }}
-                                    onMouseEnter={(e) => { e.currentTarget.style.color = '#9CA3AF'; }}
-                                    onMouseLeave={(e) => { e.currentTarget.style.color = '#4B5563'; }}
-                                    aria-label={showPw ? 'Hide password' : 'Show password'}
-                                >
-                                    {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
-                                </button>
-                            </div>
+                            <input
+                                className="input"
+                                type="password"
+                                placeholder="••••••••••"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                            />
                         </div>
 
-                        {/* Sign in button */}
+                        {/* Submit */}
                         <button
                             type="submit"
+                            className="btn btn-primary"
                             disabled={loading}
-                            className="btn-primary w-full justify-center py-3 mt-2"
-                            style={{ width: '100%', marginTop: '8px' }}
+                            style={{ justifyContent: 'center', padding: '10px', marginTop: 4, opacity: loading ? 0.7 : 1 }}
                         >
-                            {loading ? (
-                                <>
-                                    <Loader2 size={16} className="animate-spin" />
-                                    Signing in…
-                                </>
-                            ) : 'Sign in to CareIQ'}
+                            {loading ? 'Signing in…' : 'Sign in'}
                         </button>
                     </form>
 
-                    {/* Demo access */}
-                    <div style={{ marginTop: '24px' }}>
-                        <p
-                            className="section-label text-center mb-3"
-                            style={{ color: '#4B5563' }}
-                        >
-                            Demo Access
-                        </p>
-                        <div className="grid grid-cols-2 gap-2">
-                            {[
-                                { role: 'clinician', label: 'Clinician' },
-                                { role: 'coordinator', label: 'Care Coord.' },
-                                { role: 'analyst', label: 'Analyst' },
-                                { role: 'admin', label: 'Admin' },
-                            ].map(({ role, label }) => (
-                                <button
-                                    key={role}
-                                    type="button"
-                                    onClick={() => fillDemo(role)}
-                                    className="btn-ghost py-2 text-xs justify-center"
-                                    style={{ fontSize: '12px' }}
-                                >
-                                    {label}
-                                </button>
-                            ))}
-                        </div>
+                    {/* Divider */}
+                    <div style={{
+                        display: 'flex', alignItems: 'center',
+                        gap: 12, margin: '20px 0',
+                        color: 'var(--text-muted)', fontSize: 11,
+                        letterSpacing: '0.08em',
+                    }}>
+                        <div style={{ flex: 1, height: 1, background: 'var(--border-subtle)' }} />
+                        OR TRY DEMO
+                        <div style={{ flex: 1, height: 1, background: 'var(--border-subtle)' }} />
                     </div>
-                </div>
 
-                {/* Bottom notice */}
-                <p
-                    className="text-center mt-4"
-                    style={{ fontSize: '11px', color: '#4B5563' }}
-                >
-                    CareIQ Clinical Intelligence Platform · HIPAA-compliant · All data is de-identified
-                </p>
-            </motion.div>
+                    {/* Demo role buttons */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                        {Object.keys(DEMO_CREDENTIALS).map((role) => (
+                            <button
+                                key={role}
+                                className="btn btn-ghost"
+                                disabled={loading}
+                                onClick={() => loginAsDemo(role)}
+                                style={{ fontSize: 12, justifyContent: 'center' }}
+                            >
+                                {role}
+                            </button>
+                        ))}
+                    </div>
+
+                    <p style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', marginTop: 20 }}>
+                        Synthetic data only · No real patient information
+                    </p>
+                </div>
+            </div>
         </div>
     );
 }

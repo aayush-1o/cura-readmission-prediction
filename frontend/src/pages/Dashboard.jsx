@@ -1,331 +1,472 @@
-import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
-    Users, Activity, TrendingDown, AlertTriangle,
-    RefreshCw, ArrowRight, ChevronRight
+    Activity, AlertTriangle, TrendingDown, Target,
+    ChevronRight,
 } from 'lucide-react';
 import {
-    AreaChart, Area, LineChart, Line, BarChart, Bar,
-    XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, Cell
+    AreaChart, Area,
+    BarChart, Bar, Cell, LabelList,
+    XAxis, YAxis, CartesianGrid,
+    Tooltip, ReferenceLine, Label,
+    ResponsiveContainer,
 } from 'recharts';
+import {
+    useDashboardSummary, useReadmissionTrends,
+    useHighRiskToday, useRiskDistribution, useSparklines,
+} from '../services/hooks.js';
 import MetricTile from '../design-system/components/MetricTile.jsx';
 import RiskBadge from '../design-system/components/RiskBadge.jsx';
-import {
-    useDashboardSummary,
-    useReadmissionTrends,
-    useDepartmentBreakdown,
-    useRiskDistribution,
-    useHighRiskToday,
-    useSparklines,
-} from '../services/hooks.js';
-import { format, parseISO } from 'date-fns';
+import { C, AXIS, GRID, TOOLTIP } from '../design-system/chartTokens.js';
 
-const TOOLTIP_STYLE = {
-    contentStyle: { background: '#1C2333', border: '1px solid #1F2937', borderRadius: '8px', color: '#F9FAFB', fontSize: '12px' },
-    labelStyle: { color: '#9CA3AF' },
+/* ── Helpers ────────────────────────────────────────────────────────────────── */
+
+function formatDate(date) {
+    return date.toLocaleDateString('en-US', {
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+    });
+}
+
+function formatTrendDate(iso) {
+    const d = new Date(iso);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+const RISK_TIER_LABELS = {
+    low: 'Low', medium: 'Medium', high: 'High', critical: 'Critical',
+};
+const RISK_BAR_COLORS = {
+    low: C.emerald, medium: C.amber, high: '#F97316', critical: C.red,
 };
 
-const RISK_COLORS = {
-    low: '#10B981', medium: '#F59E0B', high: '#EF4444', critical: '#EF4444',
-};
+/* ── Dashboard ──────────────────────────────────────────────────────────────── */
 
 export default function Dashboard() {
     const navigate = useNavigate();
-    const { data: summary, isLoading: summaryLoading, refetch } = useDashboardSummary();
-    const { data: trends = [] } = useReadmissionTrends({ months_back: 3 });
-    const { data: departments = [] } = useDepartmentBreakdown();
-    const { data: riskDist = [] } = useRiskDistribution();
-    const { data: highRisk = [] } = useHighRiskToday({ limit: 10 });
+
+    const { data: summary, isLoading: summaryLoading } = useDashboardSummary();
+    const { data: trends = [], isLoading: trendsLoading }  = useReadmissionTrends();
+    const { data: patients = [], isLoading: patientsLoading } = useHighRiskToday();
+    const { data: riskDist = [], isLoading: distLoading } = useRiskDistribution();
     const { data: sparklines } = useSparklines();
 
-    // Aggregate trend by date (combine departments)
-    const trendByDate = trends.reduce((acc, row) => {
-        const key = row.period_start;
-        if (!acc[key]) acc[key] = { date: key, rate: 0, count: 0, cost: 0 };
-        acc[key].rate += row.readmission_rate_pct;
-        acc[key].count += 1;
-        acc[key].cost += row.avg_cost_usd;
-        return acc;
-    }, {});
-    const trendData = Object.values(trendByDate)
-        .map((d) => ({ ...d, rate: +(d.rate / (d.count || 1)).toFixed(1) }))
-        .sort((a, b) => a.date.localeCompare(b.date))
-        .slice(-30);
+    /* ── Chart data ─────────────────────────────────────────────────────── */
+    const trendData = trends
+        .filter((_, i) => i % 3 === 0)            // sample to ~30 points
+        .slice(0, 30)
+        .map((t) => ({
+            date: formatTrendDate(t.period_start),
+            rate: parseFloat(t.readmission_rate_pct.toFixed(1)),
+        }));
 
-    // Group risk distribution
-    const riskHistData = [
-        { tier: 'Low', count: riskDist.find(r => r.risk_tier === 'low')?.patient_count || 612, fill: '#10B981' },
-        { tier: 'Medium', count: riskDist.find(r => r.risk_tier === 'medium')?.patient_count || 487, fill: '#F59E0B' },
-        { tier: 'High', count: riskDist.find(r => r.risk_tier === 'high')?.patient_count || 198, fill: '#EF4444' },
-        { tier: 'Critical', count: riskDist.find(r => r.risk_tier === 'critical')?.patient_count || 87, fill: '#DC2626' },
-    ];
+    const riskDistData = riskDist.map((d) => ({
+        tier: RISK_TIER_LABELS[d.risk_tier] ?? d.risk_tier,
+        count: d.patient_count,
+        color: RISK_BAR_COLORS[d.risk_tier] ?? C.indigo,
+    }));
+
+    const highRiskRows = patients.slice(0, 8);
 
     return (
-        <div className="space-y-6">
-            {/* ── Page header ───────────────────────────────────────────────── */}
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 style={{ fontFamily: '"DM Sans", sans-serif', fontWeight: 800, fontSize: '24px', color: '#F9FAFB' }}>
-                        Clinical Overview
-                    </h1>
-                    <p style={{ fontSize: '13px', color: '#9CA3AF', marginTop: '2px' }}>
-                        Real-time readmission risk intelligence
-                    </p>
-                </div>
-                <button
-                    className="btn-ghost py-2 px-3"
-                    onClick={() => refetch()}
-                    aria-label="Refresh dashboard"
-                >
-                    <RefreshCw size={14} />
-                    <span>Refresh</span>
-                </button>
+        <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.22 }}
+        >
+            {/* ── Page header ────────────────────────────────────────────── */}
+            <div style={{ marginBottom: 24 }}>
+                <p className="t-micro" style={{ marginBottom: 4 }}>
+                    {formatDate(new Date())}
+                </p>
+                <h1 className="t-display" style={{ marginBottom: 2 }}>
+                    Clinical Overview
+                </h1>
+                <p className="t-body" style={{ color: 'var(--text-muted)' }}>
+                    Real-time readmission risk intelligence
+                </p>
             </div>
 
-            {/* ── Row 1: KPI Tiles ─────────────────────────────────────────── */}
-            <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            {/* ── KPI tiles ──────────────────────────────────────────────── */}
+            <div
+                className="stagger"
+                style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(4, 1fr)',
+                    gap: 16,
+                    marginBottom: 24,
+                }}
+            >
                 <MetricTile
                     label="Today's Admissions"
-                    value={summary?.total_admissions_30d || 147}
-                    sparkline={sparklines?.admissions}
-                    change={+5.2}
-                    icon={Users}
+                    value={summary?.total_admissions_30d ?? 0}
+                    format="number"
+                    trend={3.2}
+                    trendLabel="vs last 7 days"
+                    trendPositiveIsGood={false}
+                    sparkData={sparklines?.admissions ?? []}
+                    icon={Activity}
                     isLoading={summaryLoading}
+                    startDelay={0}
                 />
                 <MetricTile
                     label="High-Risk Patients"
-                    value={summary?.high_risk_patients_today || 38}
-                    sparkline={sparklines?.highRisk}
-                    change={-7.3}
-                    inverseColor
+                    value={summary?.high_risk_patients_today ?? 0}
+                    format="number"
+                    trend={2.1}
+                    trendLabel="vs last 7 days"
+                    trendPositiveIsGood={false}
+                    sparkData={sparklines?.highRisk ?? []}
                     icon={AlertTriangle}
                     isLoading={summaryLoading}
+                    startDelay={100}
                 />
                 <MetricTile
                     label="30-Day Readmit Rate"
-                    value={summary?.avg_readmission_rate_pct || 14.7}
+                    value={summary?.avg_readmission_rate_pct ?? 0}
                     format="percent"
-                    sparkline={sparklines?.readmitRate}
-                    change={-1.4}
-                    inverseColor
+                    trend={-1.4}
+                    trendLabel="vs last period"
+                    trendPositiveIsGood={false}
+                    sparkData={sparklines?.readmitRate ?? []}
                     icon={TrendingDown}
                     isLoading={summaryLoading}
+                    startDelay={200}
                 />
                 <MetricTile
                     label="Avg Risk Score"
-                    value={summary?.avg_risk_score || 0.421}
-                    format="score"
-                    sparkline={sparklines?.avgRiskScore}
-                    change={+2.1}
-                    inverseColor
-                    icon={Activity}
+                    value={summary?.avg_risk_score ?? 0}
+                    format="decimal"
+                    trend={-0.9}
+                    trendLabel="vs last period"
+                    trendPositiveIsGood={false}
+                    sparkData={sparklines?.avgRiskScore ?? []}
+                    icon={Target}
                     isLoading={summaryLoading}
+                    startDelay={300}
                 />
             </div>
 
-            {/* ── Row 2: Charts ────────────────────────────────────────────── */}
-            <div className="grid grid-cols-5 gap-4">
-                {/* Readmission trend */}
-                <div className="card col-span-5 lg:col-span-3">
-                    <div className="flex items-center justify-between mb-4">
-                        <div>
-                            <h2 style={{ fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: '16px', color: '#F9FAFB' }}>
-                                Readmission Rate — 30-Day Window
-                            </h2>
-                            <p style={{ fontSize: '12px', color: '#9CA3AF', marginTop: '1px' }}>All departments combined</p>
-                        </div>
+            {/* ── Main body: chart (left) + risk dist (right) ────────────── */}
+            <div
+                style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 340px',
+                    gap: 16,
+                    marginBottom: 16,
+                }}
+            >
+                {/* ── Area chart ─────────────────────────────────────────── */}
+                <div className="card" style={{ padding: '20px 20px 16px' }}>
+                    <div style={{ marginBottom: 16 }}>
+                        <h2 className="t-heading">Readmission Rate</h2>
+                        <p className="t-label" style={{ color: 'var(--text-muted)', marginTop: 2 }}>
+                            30-day rolling window
+                        </p>
                     </div>
+
                     <ResponsiveContainer width="100%" height={220}>
-                        <AreaChart data={trendData}>
+                        <AreaChart
+                            data={trendData}
+                            margin={{ top: 10, right: 20, left: 0, bottom: 0 }}
+                        >
                             <defs>
                                 <linearGradient id="rateGrad" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="0%" stopColor="#00D4FF" stopOpacity={0.2} />
-                                    <stop offset="100%" stopColor="#00D4FF" stopOpacity={0} />
+                                    <stop offset="0%"   stopColor={C.indigo} stopOpacity={0.12} />
+                                    <stop offset="100%" stopColor={C.indigo} stopOpacity={0} />
                                 </linearGradient>
                             </defs>
+                            <CartesianGrid {...GRID} />
                             <XAxis
                                 dataKey="date"
-                                tick={{ fill: '#9CA3AF', fontSize: 11, fontFamily: '"JetBrains Mono", monospace' }}
-                                tickFormatter={(d) => { try { return format(parseISO(d), 'MMM d'); } catch { return d; } }}
-                                axisLine={false} tickLine={false}
+                                {...AXIS}
+                                interval={4}
+                                axisLine={false}
+                                tickLine={false}
                             />
                             <YAxis
-                                tick={{ fill: '#9CA3AF', fontSize: 11 }}
                                 tickFormatter={(v) => `${v}%`}
-                                axisLine={false} tickLine={false}
-                                width={38}
+                                {...AXIS}
+                                axisLine={false}
+                                tickLine={false}
+                                width={36}
                             />
-                            <Tooltip {...TOOLTIP_STYLE} formatter={(v) => [`${v.toFixed(1)}%`, 'Readmission Rate']} />
-                            <ReferenceLine y={15} stroke="#F59E0B" strokeDasharray="4 3" strokeWidth={1}
-                                label={{ value: 'Benchmark 15%', fill: '#F59E0B', fontSize: 10, position: 'right' }}
+                            <Tooltip
+                                {...TOOLTIP}
+                                formatter={(v) => [`${v}%`, 'Readmit Rate']}
                             />
+                            <ReferenceLine
+                                y={15}
+                                stroke={C.benchmark}
+                                strokeDasharray="5 3"
+                                strokeWidth={1.5}
+                            >
+                                <Label
+                                    value="CMS 15%"
+                                    position="insideTopRight"
+                                    style={{
+                                        fontSize: 10,
+                                        fill: C.axisText,
+                                        fontFamily: 'Instrument Sans, sans-serif',
+                                    }}
+                                />
+                            </ReferenceLine>
                             <Area
-                                type="monotone" dataKey="rate"
-                                stroke="#00D4FF" strokeWidth={2}
+                                type="monotone"
+                                dataKey="rate"
+                                stroke={C.indigo}
+                                strokeWidth={2}
                                 fill="url(#rateGrad)"
-                                isAnimationActive animationDuration={600}
+                                dot={false}
+                                activeDot={{ r: 4, fill: C.indigo, strokeWidth: 2, stroke: '#FFFFFF' }}
+                                animationDuration={1000}
                             />
                         </AreaChart>
                     </ResponsiveContainer>
+
+                    {/* ── Summary stat row below chart ─────────────────── */}
+                    <div
+                        style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(4, 1fr)',
+                            gap: 1,
+                            background: 'var(--border-subtle)',
+                            border: '1px solid var(--border-subtle)',
+                            borderRadius: 'var(--radius-md)',
+                            overflow: 'hidden',
+                            marginTop: 16,
+                        }}
+                    >
+                        {[
+                            { label: 'Total Admissions', value: '2,847' },
+                            { label: 'Readmissions',     value: '418'   },
+                            { label: 'Est. Prevented',   value: '63'    },
+                            { label: 'Avg LOS',          value: '4.2d'  },
+                        ].map(({ label, value }) => (
+                            <div
+                                key={label}
+                                style={{ background: 'var(--bg-surface)', padding: '12px 16px' }}
+                            >
+                                <p className="t-micro" style={{ marginBottom: 4 }}>{label}</p>
+                                <p
+                                    className="t-mono"
+                                    style={{
+                                        fontSize: 16,
+                                        fontWeight: 500,
+                                        color: 'var(--text-primary)',
+                                    }}
+                                >
+                                    {value}
+                                </p>
+                            </div>
+                        ))}
+                    </div>
                 </div>
 
-                {/* Risk distribution */}
-                <div className="card col-span-5 lg:col-span-2">
-                    <h2 style={{ fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: '16px', color: '#F9FAFB', marginBottom: '4px' }}>
-                        Current Risk Distribution
-                    </h2>
-                    <p style={{ fontSize: '12px', color: '#9CA3AF', marginBottom: '16px' }}>Patients by risk tier</p>
+                {/* ── Risk distribution bar chart ─────────────────────── */}
+                <div className="card" style={{ padding: '20px 16px 16px' }}>
+                    <div style={{ marginBottom: 16 }}>
+                        <h2 className="t-heading">Risk Distribution</h2>
+                        <p className="t-label" style={{ color: 'var(--text-muted)', marginTop: 2 }}>
+                            Current admissions by tier
+                        </p>
+                    </div>
+
                     <ResponsiveContainer width="100%" height={220}>
-                        <BarChart data={riskHistData} barCategoryGap="25%">
-                            <XAxis dataKey="tier" tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={false} tickLine={false} />
-                            <YAxis tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={false} tickLine={false} width={40} />
-                            <Tooltip
-                                {...TOOLTIP_STYLE}
-                                formatter={(v) => [v.toLocaleString(), 'Patients']}
+                        <BarChart
+                            data={riskDistData}
+                            barSize={44}
+                            margin={{ top: 16, right: 8, left: -16, bottom: 0 }}
+                        >
+                            <CartesianGrid {...GRID} />
+                            <XAxis
+                                dataKey="tier"
+                                {...AXIS}
+                                axisLine={false}
+                                tickLine={false}
                             />
-                            <Bar dataKey="count" radius={[4, 4, 0, 0]} isAnimationActive animationDuration={600}>
-                                {riskHistData.map((d, i) => <Cell key={i} fill={d.fill} />)}
+                            <YAxis {...AXIS} axisLine={false} tickLine={false} />
+                            <Tooltip
+                                {...TOOLTIP}
+                                formatter={(v, name) => [v, 'Patients']}
+                            />
+                            <Bar dataKey="count" radius={[4, 4, 0, 0]} animationDuration={800}>
+                                <LabelList
+                                    dataKey="count"
+                                    position="top"
+                                    style={{
+                                        ...AXIS,
+                                        fontWeight: 600,
+                                        fill: C.textPrimary,
+                                    }}
+                                />
+                                {riskDistData.map((entry, i) => (
+                                    <Cell key={i} fill={entry.color} />
+                                ))}
                             </Bar>
                         </BarChart>
                     </ResponsiveContainer>
-                    <div className="flex justify-between mt-2">
-                        {riskHistData.map((d) => (
-                            <div key={d.tier} className="text-center">
-                                <p style={{ fontSize: '18px', fontWeight: 700, fontFamily: '"JetBrains Mono", monospace', color: d.fill }}>{d.count}</p>
-                                <p style={{ fontSize: '11px', color: '#9CA3AF' }}>{d.tier}</p>
+
+                    {/* Tier legend */}
+                    <div
+                        style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 8,
+                            marginTop: 12,
+                            paddingTop: 12,
+                            borderTop: '1px solid var(--border-subtle)',
+                        }}
+                    >
+                        {riskDistData.map(({ tier, count, color }) => (
+                            <div
+                                key={tier}
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                }}
+                            >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    <div style={{
+                                        width: 8,
+                                        height: 8,
+                                        borderRadius: '50%',
+                                        background: color,
+                                        flexShrink: 0,
+                                    }} />
+                                    <span style={{
+                                        fontSize: 12,
+                                        color: 'var(--text-secondary)',
+                                        fontFamily: "'Instrument Sans', sans-serif",
+                                    }}>
+                                        {tier}
+                                    </span>
+                                </div>
+                                <span
+                                    className="t-mono"
+                                    style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-primary)' }}
+                                >
+                                    {count}
+                                </span>
                             </div>
                         ))}
                     </div>
                 </div>
             </div>
 
-            {/* ── Row 3: High-risk table + dept performance ─────────────────── */}
-            <div className="grid grid-cols-5 gap-4">
-                {/* High risk patients */}
-                <div className="card col-span-5 lg:col-span-3">
-                    <div className="flex items-center justify-between mb-4">
-                        <div>
-                            <h2 style={{ fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: '16px', color: '#F9FAFB' }}>
-                                High-Risk — Next 48 Hours
-                            </h2>
-                            <p style={{ fontSize: '12px', color: '#9CA3AF' }}>Top patients by predicted readmission risk</p>
-                        </div>
-                        <button
-                            className="btn-ghost py-1.5 px-3 text-xs"
-                            onClick={() => navigate('/risk-queue')}
-                        >
-                            View all <ChevronRight size={13} />
-                        </button>
-                    </div>
-                    <div className="overflow-x-auto">
-                        <table className="w-full border-collapse">
-                            <thead>
-                                <tr style={{ background: '#0A0F1C' }}>
-                                    {['Patient', 'Risk', 'Department', 'Top factor', 'Action'].map((h) => (
-                                        <th
-                                            key={h}
-                                            style={{ padding: '8px 12px', textAlign: 'left', fontSize: '11px', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: '#9CA3AF', whiteSpace: 'nowrap' }}
-                                        >
-                                            {h}
-                                        </th>
-                                    ))}
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {(highRisk.length ? highRisk : []).slice(0, 8).map((p, i) => (
-                                    <motion.tr
-                                        key={p.patient_id || i}
-                                        initial={{ opacity: 0 }}
-                                        animate={{ opacity: 1 }}
-                                        transition={{ delay: i * 0.04 }}
-                                        style={{
-                                            background: i % 2 === 0 ? '#111827' : '#0D1321',
-                                            cursor: 'pointer',
-                                            transition: 'background 150ms',
-                                        }}
-                                        onClick={() => navigate(`/patients/${p.patient_id}`)}
-                                        onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(0,212,255,0.05)'; }}
-                                        onMouseLeave={(e) => { e.currentTarget.style.background = i % 2 === 0 ? '#111827' : '#0D1321'; }}
-                                    >
-                                        <td style={{ padding: '10px 12px', borderBottom: '1px solid rgba(31,41,55,0.5)' }}>
-                                            <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '12px', color: '#00D4FF' }}>{p.patient_id}</span>
-                                        </td>
-                                        <td style={{ padding: '10px 12px', borderBottom: '1px solid rgba(31,41,55,0.5)' }}>
-                                            <div className="flex items-center gap-2">
-                                                <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '13px', fontWeight: 600, color: RISK_COLORS[p.risk_tier] }}>
-                                                    {Math.round((p.risk_score || 0) * 100)}%
-                                                </span>
-                                                <RiskBadge tier={p.risk_tier} size="sm" />
-                                            </div>
-                                        </td>
-                                        <td style={{ padding: '10px 12px', borderBottom: '1px solid rgba(31,41,55,0.5)', fontSize: '12px', color: '#9CA3AF' }}>{p.department}</td>
-                                        <td style={{ padding: '10px 12px', borderBottom: '1px solid rgba(31,41,55,0.5)', fontSize: '12px', color: '#9CA3AF' }}>{p.top_risk_factors?.[0] || '—'}</td>
-                                        <td style={{ padding: '10px 12px', borderBottom: '1px solid rgba(31,41,55,0.5)' }}>
-                                            <button
-                                                className="btn-ghost py-1 px-2.5"
-                                                style={{ fontSize: '11px' }}
-                                                onClick={(e) => { e.stopPropagation(); navigate(`/patients/${p.patient_id}`); }}
-                                            >
-                                                Care plan <ArrowRight size={11} />
-                                            </button>
-                                        </td>
-                                    </motion.tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                {/* Department performance */}
-                <div className="card col-span-5 lg:col-span-2">
-                    <h2 style={{ fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: '16px', color: '#F9FAFB', marginBottom: '4px' }}>
-                        Department Performance
-                    </h2>
-                    <p style={{ fontSize: '12px', color: '#9CA3AF', marginBottom: '16px' }}>vs. CMS Benchmark</p>
-                    <div className="space-y-1">
-                        {(departments.length ? departments : []).slice(0, 5).map((dept, i) => {
-                            const isGood = dept.vs_benchmark_delta <= 0;
-                            const color = isGood ? '#10B981' : '#EF4444';
-                            return (
-                                <motion.div
-                                    key={dept.department_name}
-                                    initial={{ opacity: 0, x: 8 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    transition={{ delay: i * 0.07 }}
-                                    style={{ padding: '10px 12px', borderRadius: '8px', background: '#1C2333', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}
-                                >
-                                    <div className="flex-1 min-w-0">
-                                        <p style={{ fontSize: '13px', fontWeight: 500, color: '#F9FAFB', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{dept.department_name}</p>
-                                        <div className="flex items-center gap-2 mt-0.5">
-                                            {/* Mini rate bar */}
-                                            <div style={{ height: '3px', width: '64px', background: '#1F2937', borderRadius: '2px', overflow: 'hidden' }}>
-                                                <div style={{ height: '100%', width: `${Math.min((dept.readmission_rate / 25) * 100, 100)}%`, background: color, borderRadius: '2px' }} />
-                                            </div>
-                                            <span style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: '#9CA3AF' }}>{dept.readmission_rate?.toFixed(1)}%</span>
-                                        </div>
-                                    </div>
-                                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                                        <span style={{ fontSize: '12px', fontWeight: 600, color, fontFamily: '"JetBrains Mono", monospace' }}>
-                                            {dept.vs_benchmark_delta > 0 ? '+' : ''}{dept.vs_benchmark_delta?.toFixed(1)}pp
-                                        </span>
-                                        {/* Star rating */}
-                                        <p style={{ fontSize: '11px', color: '#4B5563' }}>
-                                            {'★'.repeat(dept.cms_star_rating || 0)}{'☆'.repeat(5 - (dept.cms_star_rating || 0))}
-                                        </p>
-                                    </div>
-                                </motion.div>
-                            );
-                        })}
+            {/* ── High-risk patient table ─────────────────────────────────── */}
+            <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                {/* Table header */}
+                <div
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '16px 20px',
+                        borderBottom: '1px solid var(--border-subtle)',
+                    }}
+                >
+                    <div>
+                        <h2 className="t-heading">High-Risk Worklist</h2>
+                        <p className="t-label" style={{ color: 'var(--text-muted)', marginTop: 2 }}>
+                            {highRiskRows.length} patients requiring attention today
+                        </p>
                     </div>
                     <button
-                        className="btn-ghost w-full mt-4 justify-center text-xs py-2"
-                        onClick={() => navigate('/analytics')}
+                        className="btn btn-ghost"
+                        onClick={() => navigate('/risk-queue')}
+                        style={{ fontSize: 12, gap: 4 }}
                     >
-                        Full Analytics <ChevronRight size={13} />
+                        Full queue <ChevronRight size={13} />
                     </button>
                 </div>
+
+                {/* Table */}
+                <div style={{ overflowY: 'auto', maxHeight: 360 }}>
+                    <table className="data-table" style={{ width: '100%' }}>
+                        <thead>
+                            <tr>
+                                <th>Patient ID</th>
+                                <th>Risk</th>
+                                <th>Department</th>
+                                <th>Primary Factor</th>
+                                <th>LOS</th>
+                                <th style={{ width: 100 }}></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {patientsLoading
+                                ? Array.from({ length: 5 }).map((_, i) => (
+                                    <tr key={i}>
+                                        {Array.from({ length: 6 }).map((_, j) => (
+                                            <td key={j}>
+                                                <div className="skeleton" style={{ height: 12, width: '70%' }} />
+                                            </td>
+                                        ))}
+                                    </tr>
+                                ))
+                                : highRiskRows.map((p) => (
+                                    <tr
+                                        key={p.patient_id}
+                                        style={{ cursor: 'pointer' }}
+                                        onClick={() => navigate(`/patients/${p.patient_id}`)}
+                                    >
+                                        <td>
+                                            <span
+                                                className="t-mono"
+                                                style={{ fontSize: 12, color: 'var(--text-secondary)' }}
+                                            >
+                                                {p.patient_id}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                <span
+                                                    className="t-mono"
+                                                    style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}
+                                                >
+                                                    {(p.risk_score * 100).toFixed(0)}%
+                                                </span>
+                                                <RiskBadge tier={p.risk_tier} size="sm" showDot />
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <span style={{ fontSize: 13, color: 'var(--text-primary)' }}>
+                                                {p.department}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                                                {p.top_risk_factors?.[0] ?? '—'}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span
+                                                className="t-mono"
+                                                style={{ fontSize: 12, color: 'var(--text-muted)' }}
+                                            >
+                                                {p.length_of_stay_days?.toFixed(1)}d
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <button
+                                                className="btn btn-ghost"
+                                                style={{ fontSize: 12, padding: '4px 10px', marginRight: 4 }}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    navigate(`/patients/${p.patient_id}`);
+                                                }}
+                                            >
+                                                Care Plan →
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))
+                            }
+                        </tbody>
+                    </table>
+                </div>
             </div>
-        </div>
+        </motion.div>
     );
 }

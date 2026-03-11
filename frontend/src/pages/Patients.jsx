@@ -1,148 +1,326 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
 import { Search, ChevronDown, Filter } from 'lucide-react';
 import RiskBadge from '../design-system/components/RiskBadge.jsx';
 import { useHighRiskToday } from '../services/hooks.js';
 import { mockHighRiskPatients } from '../services/mockData.js';
 
 const DEPT_OPTIONS = ['All Departments', 'Cardiology', 'Internal Medicine', 'Pulmonology', 'Nephrology', 'Orthopedics'];
-const RISK_TIERS = ['All Risk Tiers', 'critical', 'high', 'medium', 'low'];
-const PAGE_SIZE = 20;
+const RISK_TIERS   = ['All Risk Tiers', 'critical', 'high', 'medium', 'low'];
+const PAGE_SIZE    = 20;
 
+/* ─── Helpers ────────────────────────────────────────────────────────────── */
+function riskColor(tier) {
+    return tier === 'critical' ? 'var(--risk-critical)'
+        : tier === 'high'     ? 'var(--risk-high)'
+        : tier === 'medium'   ? 'var(--risk-medium)'
+        : 'var(--risk-low)';
+}
+
+function cciColor(cci) {
+    if (cci >= 8) return 'var(--risk-critical)';
+    if (cci >= 6) return 'var(--risk-high)';
+    if (cci >= 4) return 'var(--risk-medium)';
+    return 'var(--risk-low)';
+}
+
+/* ─── Patients page ──────────────────────────────────────────────────────── */
 export default function Patients() {
     const navigate = useNavigate();
     const [search, setSearch] = useState('');
-    const [dept, setDept] = useState('All Departments');
-    const [tier, setTier] = useState('All Risk Tiers');
-    const [page, setPage] = useState(1);
+    const [dept,   setDept]   = useState('All Departments');
+    const [tier,   setTier]   = useState('All Risk Tiers');
+    const [page,   setPage]   = useState(1);
 
-    // Reuse the high-risk-today endpoint for patient data (includes all admitted patients sorted by risk)
     const { data: rawPatients = [], isLoading } = useHighRiskToday({ limit: 100 });
     const patients = rawPatients.length ? rawPatients : mockHighRiskPatients;
 
     const filtered = patients.filter((p) => {
-        const matchSearch = !search || p.patient_id?.toLowerCase().includes(search.toLowerCase()) || p.department?.toLowerCase().includes(search.toLowerCase());
+        const matchSearch = !search
+            || p.patient_id?.toLowerCase().includes(search.toLowerCase())
+            || p.department?.toLowerCase().includes(search.toLowerCase());
         const matchDept = dept === 'All Departments' || p.department === dept;
-        const matchTier = tier === 'All Risk Tiers' || p.risk_tier === tier;
+        const matchTier = tier === 'All Risk Tiers'  || p.risk_tier  === tier;
         return matchSearch && matchDept && matchTier;
     });
 
     const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
-    const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+    const paged      = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
     const cols = [
-        { key: 'patient_id', label: 'Patient ID', width: '130px' },
-        { key: 'risk', label: 'Risk Score', width: '120px' },
-        { key: 'department', label: 'Department', width: '160px' },
-        { key: 'diagnosis', label: 'Diagnosis', width: '180px' },
-        { key: 'los', label: 'LOS', width: '70px' },
-        { key: 'cci', label: 'CCI', width: '60px' },
-        { key: 'action', label: '', width: '110px' },
+        { key: 'patient_id', label: 'Patient ID',  width: 130 },
+        { key: 'risk',       label: 'Risk Score',   width: 160 },
+        { key: 'department', label: 'Department',   width: 160 },
+        { key: 'diagnosis',  label: 'Diagnosis',    width: 200 },
+        { key: 'los',        label: 'LOS',          width: 70  },
+        { key: 'cci',        label: 'CCI',          width: 60  },
+        { key: 'action',     label: '',             width: 110 },
     ];
 
+    /* shared td style */
+    const tdBase = {
+        padding: '13px 16px',
+        fontSize: 13,
+        color: 'var(--text-primary)',
+        borderBottom: '1px solid var(--border-subtle)',
+        background: 'var(--bg-elevated)',
+        fontFamily: "'Instrument Sans', sans-serif",
+        transition: 'background 120ms ease',
+    };
+
     return (
-        <div className="space-y-5">
-            {/* Header */}
+        <div className="page-enter" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+            {/* ── Page header ────────────────────────────────────────── */}
             <div>
-                <h1 style={{ fontFamily: '"DM Sans", sans-serif', fontWeight: 800, fontSize: '24px', color: '#F9FAFB' }}>Patients</h1>
-                <p style={{ fontSize: '13px', color: '#9CA3AF', marginTop: '2px' }}>Currently admitted patients — all departments</p>
+                <h1 className="t-display">Patient Registry</h1>
+                <p className="t-body" style={{ color: 'var(--text-secondary)', marginTop: 2 }}>
+                    Active admissions and care history
+                </p>
+                <p className="t-label" style={{ color: 'var(--text-muted)', marginTop: 4 }}>
+                    Currently admitted patients — all departments
+                </p>
             </div>
 
-            {/* Filter bar */}
-            <div className="card py-3 flex flex-wrap items-center gap-3" style={{ borderRadius: '10px' }}>
-                <div className="flex items-center gap-2 flex-1 min-w-48">
-                    <Search size={14} color="#4B5563" />
+            {/* ── Filter bar ─────────────────────────────────────────── */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+
+                {/* Search */}
+                <div style={{ position: 'relative', flex: 1, maxWidth: 400 }}>
+                    <Search
+                        size={14}
+                        style={{
+                            position: 'absolute', left: 10, top: '50%',
+                            transform: 'translateY(-50%)',
+                            color: 'var(--text-muted)',
+                            pointerEvents: 'none',
+                        }}
+                    />
                     <input
-                        className="bg-transparent border-none outline-none text-sm w-full"
-                        style={{ color: '#F9FAFB', fontSize: '13px' }}
+                        className="input"
                         placeholder="Search by patient ID or department…"
                         value={search}
                         onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                        style={{ paddingLeft: 34 }}
                     />
                 </div>
-                <div className="relative">
-                    <select className="input py-2 pr-8 appearance-none cursor-pointer" style={{ minWidth: '160px', fontSize: '13px' }} value={dept} onChange={(e) => { setDept(e.target.value); setPage(1); }}>
+
+                {/* Department */}
+                <div style={{ position: 'relative' }}>
+                    <select
+                        className="input"
+                        value={dept}
+                        onChange={(e) => { setDept(e.target.value); setPage(1); }}
+                        style={{ minWidth: 160, paddingRight: 28, appearance: 'none', cursor: 'pointer', fontSize: 13 }}
+                    >
                         {DEPT_OPTIONS.map((d) => <option key={d}>{d}</option>)}
                     </select>
-                    <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" color="#9CA3AF" />
+                    <ChevronDown size={12} style={{
+                        position: 'absolute', right: 8, top: '50%',
+                        transform: 'translateY(-50%)',
+                        color: 'var(--text-muted)',
+                        pointerEvents: 'none',
+                    }} />
                 </div>
-                <div className="relative">
-                    <select className="input py-2 pr-8 appearance-none cursor-pointer" style={{ minWidth: '140px', fontSize: '13px' }} value={tier} onChange={(e) => { setTier(e.target.value); setPage(1); }}>
+
+                {/* Risk tier */}
+                <div style={{ position: 'relative' }}>
+                    <select
+                        className="input"
+                        value={tier}
+                        onChange={(e) => { setTier(e.target.value); setPage(1); }}
+                        style={{ minWidth: 140, paddingRight: 28, appearance: 'none', cursor: 'pointer', fontSize: 13 }}
+                    >
                         {RISK_TIERS.map((t) => <option key={t}>{t}</option>)}
                     </select>
-                    <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" color="#9CA3AF" />
+                    <ChevronDown size={12} style={{
+                        position: 'absolute', right: 8, top: '50%',
+                        transform: 'translateY(-50%)',
+                        color: 'var(--text-muted)',
+                        pointerEvents: 'none',
+                    }} />
                 </div>
-                <span style={{ fontSize: '12px', color: '#9CA3AF', marginLeft: 'auto' }}>{filtered.length} patients</span>
+
+                <span className="t-label" style={{ marginLeft: 'auto', color: 'var(--text-muted)' }}>
+                    {filtered.length} patients
+                </span>
             </div>
 
-            {/* Table */}
-            <div style={{ background: '#111827', border: '1px solid #1F2937', borderRadius: '12px', overflow: 'hidden' }}>
-                <table className="w-full border-collapse">
+            {/* ── Table card ─────────────────────────────────────────── */}
+            <div style={{
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: 'var(--radius-lg)',
+                boxShadow: 'var(--shadow-card)',
+                overflow: 'hidden',
+            }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
-                        <tr style={{ background: '#0A0F1C' }}>
+                        <tr>
                             {cols.map((col) => (
-                                <th
-                                    key={col.key}
-                                    style={{ padding: '10px 14px', textAlign: 'left', fontSize: '11px', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: '#9CA3AF', whiteSpace: 'nowrap', width: col.width }}
-                                >
+                                <th key={col.key} style={{
+                                    width: col.width,
+                                    padding: '10px 16px',
+                                    textAlign: 'left',
+                                    fontSize: 11,
+                                    fontWeight: 600,
+                                    letterSpacing: '0.07em',
+                                    textTransform: 'uppercase',
+                                    color: 'var(--text-muted)',
+                                    background: 'var(--bg-base)',
+                                    borderBottom: '1px solid var(--border-subtle)',
+                                    fontFamily: "'Instrument Sans', sans-serif",
+                                    whiteSpace: 'nowrap',
+                                }}>
                                     {col.label}
                                 </th>
                             ))}
                         </tr>
                     </thead>
                     <tbody>
-                        {isLoading ? (
-                            Array.from({ length: 10 }).map((_, i) => (
-                                <tr key={i} style={{ background: i % 2 === 0 ? '#111827' : '#0D1321' }}>
-                                    {cols.map((col, j) => (
-                                        <td key={j} style={{ padding: '12px 14px' }}><div className="skeleton h-4 rounded" /></td>
-                                    ))}
-                                </tr>
-                            ))
-                        ) : paged.map((p, i) => {
-                            const riskPct = Math.round((p.risk_score || 0) * 100);
-                            const riskColor = p.risk_tier === 'critical' || p.risk_tier === 'high' ? '#EF4444' : p.risk_tier === 'medium' ? '#F59E0B' : '#10B981';
-                            return (
-                                <motion.tr
-                                    key={p.patient_id || i}
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    transition={{ delay: i * 0.025 }}
-                                    style={{ background: i % 2 === 0 ? '#111827' : '#0D1321', cursor: 'pointer', transition: 'background 150ms' }}
-                                    onClick={() => navigate(`/patients/${p.patient_id}`)}
-                                    onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(0,212,255,0.05)'; }}
-                                    onMouseLeave={(e) => { e.currentTarget.style.background = i % 2 === 0 ? '#111827' : '#0D1321'; }}
-                                >
-                                    <td style={{ padding: '12px 14px', borderBottom: '1px solid rgba(31,41,55,0.5)' }}>
-                                        <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '12px', color: '#00D4FF' }}>{p.patient_id}</span>
+                        {/* ── Skeleton loading ── */}
+                        {isLoading && Array.from({ length: 10 }).map((_, i) => (
+                            <tr key={i}>
+                                {cols.map((col, j) => (
+                                    <td key={j} style={{ ...tdBase, borderBottom: '1px solid var(--border-subtle)' }}>
+                                        <div className="skeleton" style={{ height: 14, borderRadius: 4 }} />
                                     </td>
-                                    <td style={{ padding: '12px 14px', borderBottom: '1px solid rgba(31,41,55,0.5)' }}>
-                                        <div className="flex items-center gap-2">
-                                            <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '13px', fontWeight: 600, color: riskColor }}>{riskPct}%</span>
-                                            <RiskBadge tier={p.risk_tier} size="sm" />
+                                ))}
+                            </tr>
+                        ))}
+
+                        {/* ── Data rows ── */}
+                        {!isLoading && paged.map((p, i) => {
+                            const riskPct = Math.round((p.risk_score || 0) * 100);
+                            const isLast  = i === paged.length - 1;
+
+                            const rowTd = {
+                                ...tdBase,
+                                borderBottom: isLast ? 'none' : '1px solid var(--border-subtle)',
+                            };
+
+                            return (
+                                <tr
+                                    key={p.patient_id || i}
+                                    style={{
+                                        cursor: 'pointer',
+                                        animation: `fadeUp 0.25s ease-out ${i * 30}ms both`,
+                                    }}
+                                    onClick={() => navigate(`/patients/${p.patient_id}`)}
+                                    onMouseEnter={(e) => {
+                                        e.currentTarget.querySelectorAll('td').forEach((td) => {
+                                            td.style.background = 'var(--bg-sunken)';
+                                        });
+                                    }}
+                                    onMouseLeave={(e) => {
+                                        e.currentTarget.querySelectorAll('td').forEach((td) => {
+                                            td.style.background = 'var(--bg-elevated)';
+                                        });
+                                    }}
+                                >
+                                    {/* Patient ID */}
+                                    <td style={rowTd}>
+                                        <span style={{
+                                            fontFamily: "'DM Mono', monospace",
+                                            fontSize: 12,
+                                            color: 'var(--accent-primary)',
+                                            cursor: 'pointer',
+                                        }}
+                                            onMouseEnter={(e) => {
+                                                e.currentTarget.style.textDecoration = 'underline';
+                                                e.currentTarget.style.color = 'var(--accent-hover)';
+                                            }}
+                                            onMouseLeave={(e) => {
+                                                e.currentTarget.style.textDecoration = 'none';
+                                                e.currentTarget.style.color = 'var(--accent-primary)';
+                                            }}
+                                        >
+                                            {p.patient_id}
+                                        </span>
+                                    </td>
+
+                                    {/* Risk Score */}
+                                    <td style={rowTd}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                            <span style={{
+                                                fontFamily: "'DM Mono', monospace",
+                                                fontSize: 13,
+                                                fontWeight: 600,
+                                                color: riskColor(p.risk_tier),
+                                            }}>
+                                                {riskPct}%
+                                            </span>
+                                            <RiskBadge tier={p.risk_tier} size="sm" showDot={false} />
                                         </div>
                                     </td>
-                                    <td style={{ padding: '12px 14px', fontSize: '13px', color: '#9CA3AF', borderBottom: '1px solid rgba(31,41,55,0.5)' }}>{p.department || '—'}</td>
-                                    <td style={{ padding: '12px 14px', fontSize: '12px', color: '#9CA3AF', borderBottom: '1px solid rgba(31,41,55,0.5)', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.primary_diagnosis || '—'}</td>
-                                    <td style={{ padding: '12px 14px', fontFamily: '"JetBrains Mono", monospace', fontSize: '12px', color: '#F9FAFB', borderBottom: '1px solid rgba(31,41,55,0.5)' }}>{p.length_of_stay_days?.toFixed(1) || '—'}d</td>
-                                    <td style={{ padding: '12px 14px', fontFamily: '"JetBrains Mono", monospace', fontSize: '12px', color: '#F59E0B', borderBottom: '1px solid rgba(31,41,55,0.5)' }}>{p.charlson_cci || '—'}</td>
-                                    <td style={{ padding: '12px 14px', borderBottom: '1px solid rgba(31,41,55,0.5)' }}>
+
+                                    {/* Department */}
+                                    <td style={{ ...rowTd, color: 'var(--text-secondary)' }}>
+                                        {p.department || '—'}
+                                    </td>
+
+                                    {/* Diagnosis */}
+                                    <td style={{
+                                        ...rowTd,
+                                        color: 'var(--text-muted)',
+                                        fontSize: 12,
+                                        maxWidth: 200,
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
+                                        whiteSpace: 'nowrap',
+                                    }}>
+                                        {p.primary_diagnosis || '—'}
+                                    </td>
+
+                                    {/* LOS */}
+                                    <td style={rowTd}>
+                                        <span style={{
+                                            fontFamily: "'DM Mono', monospace",
+                                            fontSize: 13,
+                                            color: 'var(--text-primary)',
+                                        }}>
+                                            {p.length_of_stay_days?.toFixed(1) ?? '—'}
+                                            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>d</span>
+                                        </span>
+                                    </td>
+
+                                    {/* CCI */}
+                                    <td style={rowTd}>
+                                        <span style={{
+                                            fontFamily: "'DM Mono', monospace",
+                                            fontSize: 13,
+                                            fontWeight: 600,
+                                            color: cciColor(p.charlson_cci ?? p.charlson_comorbidity_index ?? 0),
+                                        }}>
+                                            {p.charlson_cci ?? p.charlson_comorbidity_index ?? '—'}
+                                        </span>
+                                    </td>
+
+                                    {/* Action */}
+                                    <td style={{ ...rowTd, textAlign: 'right' }}>
                                         <button
-                                            className="btn-ghost py-1.5 px-3"
-                                            style={{ fontSize: '11px' }}
-                                            onClick={(e) => { e.stopPropagation(); navigate(`/patients/${p.patient_id}`); }}
+                                            className="btn btn-ghost"
+                                            style={{ fontSize: 12, padding: '5px 12px' }}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                navigate(`/patients/${p.patient_id}`);
+                                            }}
                                         >
                                             View →
                                         </button>
                                     </td>
-                                </motion.tr>
+                                </tr>
                             );
                         })}
+
+                        {/* ── Empty state ── */}
                         {!isLoading && paged.length === 0 && (
                             <tr>
-                                <td colSpan={cols.length} className="text-center py-16" style={{ color: '#4B5563', fontSize: '14px' }}>
-                                    <Filter size={28} className="mx-auto mb-3 opacity-30" />
+                                <td
+                                    colSpan={cols.length}
+                                    style={{ padding: '64px 24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 14, background: 'var(--bg-elevated)' }}
+                                >
+                                    <Filter size={28} style={{ margin: '0 auto 12px', opacity: 0.35, display: 'block' }} />
                                     No patients match your filters.
                                 </td>
                             </tr>
@@ -152,11 +330,34 @@ export default function Patients() {
 
                 {/* Pagination */}
                 {totalPages > 1 && (
-                    <div className="flex items-center justify-between px-4 py-3" style={{ borderTop: '1px solid #1F2937' }}>
-                        <p style={{ fontSize: '12px', color: '#9CA3AF' }}>{filtered.length} patients · Page {page} of {totalPages}</p>
-                        <div className="flex gap-2">
-                            <button className="btn-ghost py-1 px-3 text-xs" disabled={page === 1} onClick={() => setPage(p => p - 1)}>Prev</button>
-                            <button className="btn-ghost py-1 px-3 text-xs" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}>Next</button>
+                    <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '12px 16px',
+                        borderTop: '1px solid var(--border-subtle)',
+                        background: 'var(--bg-elevated)',
+                    }}>
+                        <p className="t-label" style={{ color: 'var(--text-muted)' }}>
+                            {filtered.length} patients · Page {page} of {totalPages}
+                        </p>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                            <button
+                                className="btn btn-ghost"
+                                style={{ fontSize: 12, padding: '5px 12px' }}
+                                disabled={page === 1}
+                                onClick={() => setPage((p) => p - 1)}
+                            >
+                                ← Prev
+                            </button>
+                            <button
+                                className="btn btn-ghost"
+                                style={{ fontSize: 12, padding: '5px 12px' }}
+                                disabled={page === totalPages}
+                                onClick={() => setPage((p) => p + 1)}
+                            >
+                                Next →
+                            </button>
                         </div>
                     </div>
                 )}

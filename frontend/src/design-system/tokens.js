@@ -1,72 +1,80 @@
 /**
- * CareIQ Design System — Token Definitions
+ * CareIQ Design System — Token Definitions (Clinical Linen Theme)
  *
- * This is the single source of truth for all visual design tokens.
- * Import this file anywhere you need design values.
+ * This file exports JS token values for use in component logic.
+ * CSS custom properties are defined in tokens.css, which is imported by index.css.
+ *
+ * The injectCSSVariables() function is a no-op since all tokens now live in tokens.css
+ * (imported via @import in index.css).
  *
  * Usage:
  *   import { colors, typography, spacing } from './tokens';
- *   import { injectCSSVariables } from './tokens';
- *
- * Call injectCSSVariables() once at app root (main.jsx) to make
- * CSS custom properties available globally.
  */
 
 // ─────────────────────────────────────────────────────────────────────────────
-// COLOR PALETTE
+// COLOR PALETTE — Clinical Linen
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const colors = {
   // Backgrounds
   bg: {
-    primary: '#0A0F1C',      // Deep navy — main app background
-    secondary: '#111827',    // Dark card surface
-    tertiary: '#1C2333',     // Slightly lighter panel / card
-    sidebar: '#080D18',      // Sidebar — darker than primary bg
-    overlay: 'rgba(10, 15, 28, 0.85)', // Modal overlays
+    base:     '#F5F4F0',      // warm off-white — main app background
+    surface:  '#FAFAF8',      // card/panel surface
+    elevated: '#FFFFFF',      // modals, dropdowns, focused cards
+    sunken:   '#EEEDE8',      // inset areas, table zebra
+    overlay:  'rgba(245, 244, 240, 0.95)', // backdrop overlays
   },
 
-  // Accent
+  // Accent — Rich Indigo
   accent: {
-    primary: '#00D4FF',             // Electric cyan — CTAs, highlights, sparklines
-    primaryHover: '#00B8E0',        // Cyan hover state
-    primaryMuted: 'rgba(0, 212, 255, 0.12)', // Cyan translucent bg
-    primaryGlow: '0 0 20px rgba(0, 212, 255, 0.35)', // Cyan glow shadow
+    primary:  '#4F46E5',                  // indigo-600 — main CTA, active nav
+    hover:    '#4338CA',                  // indigo-700 — button hover
+    light:    '#EEF2FF',                  // indigo-50 — subtle bg tint
+    mid:      '#C7D2FE',                  // indigo-200 — borders on accent bg
+    glow:     'rgba(79,70,229,0.12)',     // focus rings, card glows
   },
 
-  // Risk / Status
-  status: {
-    success: '#10B981',            // Emerald green — low risk
-    successMuted: 'rgba(16, 185, 129, 0.15)',
-    warning: '#F59E0B',            // Amber — medium risk
-    warningMuted: 'rgba(245, 158, 11, 0.15)',
-    danger: '#EF4444',             // Red — high risk / critical
-    dangerMuted: 'rgba(239, 68, 68, 0.15)',
-    info: '#3B82F6',               // Blue — informational
-    infoMuted: 'rgba(59, 130, 246, 0.15)',
+  // Risk semantic colors
+  risk: {
+    critical:       '#DC2626', // red-600
+    criticalBg:     '#FEF2F2', // red-50
+    criticalBorder: '#FECACA', // red-200
+    high:           '#D97706', // amber-600
+    highBg:         '#FFFBEB', // amber-50
+    highBorder:     '#FDE68A', // amber-200
+    medium:         '#B45309', // amber-700 (darker for light bg)
+    mediumBg:       '#FEF3C7', // amber-100
+    mediumBorder:   '#FCD34D', // amber-300
+    low:            '#059669', // emerald-600
+    lowBg:          '#ECFDF5', // emerald-50
+    lowBorder:      '#A7F3D0', // emerald-200
   },
 
   // Typography
   text: {
-    primary: '#F9FAFB',    // Near-white — primary text
-    secondary: '#9CA3AF',  // Gray — secondary / subtext
-    muted: '#4B5563',      // Dark gray — disabled / muted
-    inverse: '#0A0F1C',    // For text on light/accent backgrounds
-    accent: '#00D4FF',     // Cyan text for highlighted values
+    primary:   '#1C1917',   // stone-900 — near black with warm undertone
+    secondary: '#57534E',   // stone-600 — secondary labels
+    muted:     '#A8A29E',   // stone-400 — placeholder, disabled
+    accent:    '#4F46E5',   // indigo — links, active labels
+    onAccent:  '#FFFFFF',   // text on indigo backgrounds
+    danger:    '#DC2626',   // red — error states
+    success:   '#059669',   // emerald — success states
   },
 
   // Borders
   border: {
-    default: '#1F2937',         // Subtle border
-    focus: '#00D4FF',           // Focus ring (cyan)
-    subtle: 'rgba(31, 41, 55, 0.6)', // Ultra-subtle dividers
+    subtle:  '#E4E2DB',  // card borders, section dividers
+    default: '#D4D1C8',  // interactive elements, inputs
+    strong:  '#B8B4A8',  // focused states, emphasis
   },
 
-  // Chart palette (ordered by usage priority)
+  // Data viz
   chart: {
-    series: ['#00D4FF', '#10B981', '#F59E0B', '#EF4444', '#3B82F6', '#8B5CF6'],
-    grid: '#1F2937',
-    tooltip: '#1C2333',
+    series: ['#4F46E5', '#059669', '#D97706', '#7C3AED', '#DC2626'],
+    grid:    '#E4E2DB',
+    tooltip: '#FFFFFF',
+    axisText:'#A8A29E',
+    benchmark: '#D4D1C8',
   },
 };
 
@@ -75,57 +83,49 @@ export const colors = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const typography = {
-  // Font families
   fontFamily: {
-    display: '"DM Sans", system-ui, sans-serif',
-    body: '"Inter", system-ui, sans-serif',
-    mono: '"JetBrains Mono", "Fira Code", monospace',
+    sans:    "'Instrument Sans', system-ui, sans-serif",
+    serif:   "'Instrument Serif', Georgia, serif",
+    mono:    "'DM Mono', monospace",
+    // Legacy aliases
+    display: "'Instrument Sans', system-ui, sans-serif",
+    body:    "'Instrument Sans', system-ui, sans-serif",
   },
-
-  // Font sizes (rem-based, assumes 16px root)
   fontSize: {
-    xs: '0.75rem',    // 12px
-    sm: '0.875rem',   // 14px
-    base: '1rem',     // 16px
-    lg: '1.125rem',   // 18px
-    xl: '1.25rem',    // 20px
-    '2xl': '1.5rem',  // 24px
-    '3xl': '1.875rem',// 30px
-    '4xl': '2.25rem', // 36px
-    '5xl': '3rem',    // 48px
+    xs:   '0.75rem',    // 12px
+    sm:   '0.875rem',   // 14px
+    base: '1rem',       // 16px
+    lg:   '1.125rem',   // 18px
+    xl:   '1.25rem',    // 20px
+    '2xl':'1.5rem',     // 24px
+    '3xl':'1.875rem',   // 30px
+    '4xl':'2.25rem',    // 36px
+    '5xl':'3rem',       // 48px
   },
-
-  // Font weights
   fontWeight: {
-    regular: 400,
-    medium: 500,
-    semibold: 600,
-    bold: 700,
+    regular:   400,
+    medium:    500,
+    semibold:  600,
+    bold:      700,
     extrabold: 800,
   },
-
-  // Line heights
   lineHeight: {
-    tight: 1.25,
-    snug: 1.375,
-    normal: 1.5,
-    relaxed: 1.625,
-    loose: 2,
+    tight:   1.15,
+    snug:    1.2,
+    normal:  1.55,
+    relaxed: 1.6,
+    loose:   2,
   },
-
-  // Letter spacings
   letterSpacing: {
-    tighter: '-0.05em',
-    tight: '-0.025em',
-    normal: '0',
-    wide: '0.025em',
-    wider: '0.05em',
-    widest: '0.1em',
+    tighter: '-0.03em',
+    tight:   '-0.02em',
+    normal:  '0',
+    wide:    '0.01em',
+    wider:   '0.05em',
+    widest:  '0.07em',
   },
-
-  // Google Fonts import URL
   googleFontsUrl:
-    'https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,700;0,9..40,800;1,9..40,400&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap',
+    'https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Instrument+Serif:ital@0;1&family=DM+Mono:wght@400;500&display=swap',
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -157,12 +157,12 @@ export const spacing = {
 
 export const borderRadius = {
   none: '0',
-  sm: '4px',
-  md: '8px',      // Inputs, small buttons
-  lg: '12px',     // Cards — primary card radius
-  xl: '16px',
-  '2xl': '24px',
-  full: '9999px', // Pill badges, avatars
+  sm:   '6px',
+  md:   '10px',
+  lg:   '14px',
+  xl:   '20px',
+  pill: '999px',
+  full: '9999px',
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -170,13 +170,13 @@ export const borderRadius = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const shadows = {
-  card: '0 1px 3px rgba(0,0,0,0.4), 0 4px 16px rgba(0,0,0,0.3)',
-  cardHover: '0 4px 20px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,212,255,0.2)',
-  accentGlow: '0 0 20px rgba(0, 212, 255, 0.35)',
-  successGlow: '0 0 16px rgba(16, 185, 129, 0.35)',
-  dangerGlow: '0 0 16px rgba(239, 68, 68, 0.35)',
-  dropdown: '0 8px 32px rgba(0,0,0,0.6)',
-  modal: '0 20px 60px rgba(0,0,0,0.8)',
+  xs:       '0 1px 2px rgba(28,25,23,0.06)',
+  sm:       '0 1px 3px rgba(28,25,23,0.08), 0 1px 2px rgba(28,25,23,0.06)',
+  md:       '0 4px 6px rgba(28,25,23,0.07), 0 2px 4px rgba(28,25,23,0.06)',
+  lg:       '0 10px 15px rgba(28,25,23,0.08), 0 4px 6px rgba(28,25,23,0.05)',
+  card:     '0 1px 3px rgba(28,25,23,0.08), 0 0 0 1px #E4E2DB',
+  elevated: '0 4px 16px rgba(28,25,23,0.10), 0 0 0 1px #D4D1C8',
+  accent:   '0 0 0 3px rgba(79,70,229,0.12)',
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -196,9 +196,9 @@ export const layout = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const transitions = {
-  fast: '100ms ease',
-  base: '200ms ease',
-  slow: '300ms ease',
+  fast:   '120ms cubic-bezier(0.4, 0, 0.2, 1)',
+  base:   '200ms cubic-bezier(0.4, 0, 0.2, 1)',
+  slow:   '350ms cubic-bezier(0.4, 0, 0.2, 1)',
   spring: '300ms cubic-bezier(0.34, 1.56, 0.64, 1)',
 };
 
@@ -207,89 +207,30 @@ export const transitions = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const zIndex = {
-  base: 0,
+  base:     0,
   dropdown: 100,
-  sticky: 200,
-  overlay: 300,
-  modal: 400,
-  popover: 500,
-  tooltip: 600,
-  toast: 700,
+  sticky:   200,
+  overlay:  300,
+  modal:    400,
+  popover:  500,
+  tooltip:  600,
+  toast:    700,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CSS VARIABLE INJECTION
-// Injects all tokens as CSS custom properties on :root.
-// Call once in main.jsx before rendering the app.
+// All tokens are now defined in tokens.css (imported by index.css).
+// This function is kept as a no-op for backward compatibility.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Injects all design tokens as CSS custom properties into the document root.
- * Must be called before the React tree renders.
- */
 export function injectCSSVariables() {
-  const root = document.documentElement;
-
-  // Background colors
-  root.style.setProperty('--bg-primary', colors.bg.primary);
-  root.style.setProperty('--bg-secondary', colors.bg.secondary);
-  root.style.setProperty('--bg-tertiary', colors.bg.tertiary);
-  root.style.setProperty('--bg-sidebar', colors.bg.sidebar);
-  root.style.setProperty('--bg-overlay', colors.bg.overlay);
-
-  // Accent colors
-  root.style.setProperty('--accent-primary', colors.accent.primary);
-  root.style.setProperty('--accent-primary-hover', colors.accent.primaryHover);
-  root.style.setProperty('--accent-primary-muted', colors.accent.primaryMuted);
-
-  // Status colors
-  root.style.setProperty('--status-success', colors.status.success);
-  root.style.setProperty('--status-success-muted', colors.status.successMuted);
-  root.style.setProperty('--status-warning', colors.status.warning);
-  root.style.setProperty('--status-warning-muted', colors.status.warningMuted);
-  root.style.setProperty('--status-danger', colors.status.danger);
-  root.style.setProperty('--status-danger-muted', colors.status.dangerMuted);
-  root.style.setProperty('--status-info', colors.status.info);
-  root.style.setProperty('--status-info-muted', colors.status.infoMuted);
-
-  // Text colors
-  root.style.setProperty('--text-primary', colors.text.primary);
-  root.style.setProperty('--text-secondary', colors.text.secondary);
-  root.style.setProperty('--text-muted', colors.text.muted);
-  root.style.setProperty('--text-accent', colors.text.accent);
-
-  // Borders
-  root.style.setProperty('--border-default', colors.border.default);
-  root.style.setProperty('--border-focus', colors.border.focus);
-
-  // Typography
-  root.style.setProperty('--font-display', typography.fontFamily.display);
-  root.style.setProperty('--font-body', typography.fontFamily.body);
-  root.style.setProperty('--font-mono', typography.fontFamily.mono);
-
-  // Border radius
-  root.style.setProperty('--radius-md', borderRadius.md);
-  root.style.setProperty('--radius-lg', borderRadius.lg);
-  root.style.setProperty('--radius-full', borderRadius.full);
-
-  // Shadows
-  root.style.setProperty('--shadow-card', shadows.card);
-  root.style.setProperty('--shadow-card-hover', shadows.cardHover);
-  root.style.setProperty('--shadow-accent-glow', shadows.accentGlow);
-
-  // Layout
-  root.style.setProperty('--sidebar-width', layout.sidebarWidth);
-  root.style.setProperty('--sidebar-collapsed-width', layout.sidebarCollapsedWidth);
-  root.style.setProperty('--header-height', layout.headerHeight);
-
-  // Transitions
-  root.style.setProperty('--transition-fast', transitions.fast);
-  root.style.setProperty('--transition-base', transitions.base);
-  root.style.setProperty('--transition-slow', transitions.slow);
+  // No-op: CSS custom properties are now defined in design-system/tokens.css
+  // and loaded through the @import in index.css.
+  // Kept here for any direct callers to avoid breaking imports.
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// THEME OBJECT (convenience export for styled-components / emotion if needed)
+// THEME OBJECT
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const theme = {
