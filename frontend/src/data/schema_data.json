@@ -1,0 +1,200 @@
+{
+  "tables": [
+    {
+      "name": "fact_admissions",
+      "layer": "WAREHOUSE",
+      "rowCount": 51420,
+      "description": "Core fact table: one row per patient admission",
+      "columns": [
+        { "name": "admission_id",        "type": "UUID",      "nullable": false, "index": "PK",  "sample": ["d4e5f123-...", "a1b2c3d4-...", "f9e8d7c6-..."] },
+        { "name": "patient_key",         "type": "INT",       "nullable": false, "index": "FK, IDX", "sample": ["10001", "10045", "10123"] },
+        { "name": "diagnosis_key",       "type": "INT",       "nullable": true,  "index": "FK",  "sample": ["42", "87", "11"] },
+        { "name": "provider_key",        "type": "INT",       "nullable": true,  "index": "FK",  "sample": ["3", "7", "12"] },
+        { "name": "date_key",            "type": "INT",       "nullable": false, "index": "FK, IDX", "sample": ["20260309", "20260310", "20260311"] },
+        { "name": "admit_date",          "type": "DATE",      "nullable": false, "index": "IDX", "sample": ["2026-03-09", "2025-11-14", "2025-08-22"] },
+        { "name": "discharge_date",      "type": "DATE",      "nullable": true,  "index": null,  "sample": ["2026-03-14", "2025-11-20", null] },
+        { "name": "readmit_30day_flag",  "type": "BOOLEAN",   "nullable": false, "index": "IDX", "sample": ["false", "true", "false"] },
+        { "name": "length_of_stay_days", "type": "INT",       "nullable": true,  "index": null,  "sample": ["5", "12", "3"] },
+        { "name": "total_cost_usd",      "type": "NUMERIC",   "nullable": true,  "index": null,  "sample": ["14200.00", "38900.50", "7100.00"] },
+        { "name": "discharge_disp",      "type": "VARCHAR",   "nullable": true,  "index": null,  "sample": ["Home", "SNF", "Home Health"] },
+        { "name": "drg_code",            "type": "VARCHAR",   "nullable": true,  "index": null,  "sample": ["291", "193", "287"] },
+        { "name": "created_at",          "type": "TIMESTAMP", "nullable": false, "index": null,  "sample": ["2026-03-09 14:00:00", "2025-11-14 09:30:00", "2025-08-22 16:15:00"] },
+        { "name": "updated_at",          "type": "TIMESTAMP", "nullable": false, "index": null,  "sample": ["2026-03-11 09:15:00", "2025-11-20 14:00:00", "2025-08-22 16:15:00"] }
+      ]
+    },
+    {
+      "name": "fact_predictions",
+      "layer": "ML/AI",
+      "rowCount": 1384,
+      "description": "ML model outputs: risk scores and SHAP feature values per admission",
+      "columns": [
+        { "name": "prediction_id",    "type": "UUID",      "nullable": false, "index": "PK",  "sample": ["f1e2d3c4-...", "a2b3c4d5-...", "e3f4a5b6-..."] },
+        { "name": "patient_key",      "type": "INT",       "nullable": false, "index": "FK, IDX", "sample": ["10001", "10045", "10123"] },
+        { "name": "admission_key",    "type": "INT",       "nullable": true,  "index": "FK",  "sample": ["5001", "5045", null] },
+        { "name": "model_version",    "type": "VARCHAR",   "nullable": false, "index": "IDX", "sample": ["v1.0", "v1.0", "v1.0"] },
+        { "name": "predicted_at",     "type": "TIMESTAMP", "nullable": false, "index": "IDX", "sample": ["2026-03-11 09:15:00", "2026-03-10 06:00:00", "2026-03-09 04:00:00"] },
+        { "name": "risk_score",       "type": "NUMERIC",   "nullable": false, "index": null,  "sample": ["0.9500", "0.8200", "0.3100"] },
+        { "name": "risk_tier",        "type": "VARCHAR",   "nullable": true,  "index": null,  "sample": ["critical", "high", "medium"] },
+        { "name": "shap_values",      "type": "JSONB",     "nullable": true,  "index": null,  "sample": ["{\"age\": 0.12, \"cci\": 0.18}", "{}", null] },
+        { "name": "cohort_label",     "type": "VARCHAR",   "nullable": true,  "index": null,  "sample": ["T4_CHF_AKI_High", "T2_CHF_Moderate", "T1_Low_Risk"] }
+      ]
+    },
+    {
+      "name": "fact_vitals",
+      "layer": "WAREHOUSE",
+      "rowCount": 298400,
+      "description": "Time-series vital signs: HR, BP, SpO2, Temp — recorded every 4–8 hours",
+      "columns": [
+        { "name": "vital_id",          "type": "UUID",      "nullable": false, "index": "PK",  "sample": ["v1a2b3c4-...", "v2b3c4d5-...", "v3c4d5e6-..."] },
+        { "name": "patient_key",       "type": "INT",       "nullable": false, "index": "FK, IDX", "sample": ["10001", "10001", "10045"] },
+        { "name": "admission_key",     "type": "INT",       "nullable": true,  "index": "FK",  "sample": ["5001", "5001", "5045"] },
+        { "name": "recorded_at",       "type": "TIMESTAMP", "nullable": false, "index": "IDX", "sample": ["2026-03-11 08:00:00", "2026-03-10 20:00:00", "2026-03-10 12:00:00"] },
+        { "name": "heart_rate_bpm",    "type": "NUMERIC",   "nullable": true,  "index": null,  "sample": ["98", "91", "88"] },
+        { "name": "bp_systolic",       "type": "INT",       "nullable": true,  "index": null,  "sample": ["142", "138", "136"] },
+        { "name": "bp_diastolic",      "type": "INT",       "nullable": true,  "index": null,  "sample": ["88", "84", "82"] },
+        { "name": "spo2_pct",          "type": "NUMERIC",   "nullable": true,  "index": null,  "sample": ["94.0", "96.0", "97.0"] },
+        { "name": "temp_fahrenheit",   "type": "NUMERIC",   "nullable": true,  "index": null,  "sample": ["98.7", "99.1", "98.4"] }
+      ]
+    },
+    {
+      "name": "dim_patient",
+      "layer": "WAREHOUSE",
+      "rowCount": 9987,
+      "description": "Patient dimension: demographics and comorbidity index",
+      "columns": [
+        { "name": "patient_key",                  "type": "INT",     "nullable": false, "index": "PK",  "sample": ["10001", "10002", "10003"] },
+        { "name": "patient_id",                   "type": "VARCHAR", "nullable": false, "index": "IDX", "sample": ["PAT-010000", "PAT-010001", "PAT-010002"] },
+        { "name": "age_group",                    "type": "VARCHAR", "nullable": true,  "index": null,  "sample": ["65-74", "75-84", "55-64"] },
+        { "name": "gender",                       "type": "VARCHAR", "nullable": true,  "index": null,  "sample": ["M", "F", "M"] },
+        { "name": "charlson_comorbidity_index",   "type": "NUMERIC", "nullable": true,  "index": null,  "sample": ["7.00", "4.50", "2.00"], "added_in": "v004" },
+        { "name": "has_diabetes",                 "type": "BOOLEAN", "nullable": true,  "index": null,  "sample": ["true", "false", "true"] },
+        { "name": "has_hypertension",             "type": "BOOLEAN", "nullable": true,  "index": null,  "sample": ["true", "true", "false"] },
+        { "name": "has_chf",                      "type": "BOOLEAN", "nullable": true,  "index": null,  "sample": ["true", "false", "false"] },
+        { "name": "has_ckd",                      "type": "BOOLEAN", "nullable": true,  "index": null,  "sample": ["false", "true", "false"] },
+        { "name": "payer_type",                   "type": "VARCHAR", "nullable": true,  "index": null,  "sample": ["Medicare", "Medicaid", "Commercial"] },
+        { "name": "zip_code",                     "type": "VARCHAR", "nullable": true,  "index": null,  "sample": ["94102", "94122", "94103"] }
+      ]
+    },
+    {
+      "name": "dim_diagnosis",
+      "layer": "WAREHOUSE",
+      "rowCount": 1247,
+      "description": "ICD-10 diagnosis dimension: codes, descriptions, and clinical categories",
+      "columns": [
+        { "name": "diagnosis_key", "type": "INT",     "nullable": false, "index": "PK",  "sample": ["42", "87", "11"] },
+        { "name": "icd10_code",    "type": "VARCHAR", "nullable": false, "index": "IDX", "sample": ["I50.30", "N17.9", "J18.9"] },
+        { "name": "description",   "type": "VARCHAR", "nullable": false, "index": null,  "sample": ["CHF unspecified", "AKI unspecified", "Pneumonia"] },
+        { "name": "category",      "type": "VARCHAR", "nullable": true,  "index": null,  "sample": ["Circulatory", "Renal", "Respiratory"] },
+        { "name": "is_chronic",    "type": "BOOLEAN", "nullable": true,  "index": null,  "sample": ["true", "false", "false"] }
+      ]
+    },
+    {
+      "name": "dim_provider",
+      "layer": "WAREHOUSE",
+      "rowCount": 124,
+      "description": "Provider dimension: attending physicians and their specialties",
+      "columns": [
+        { "name": "provider_key", "type": "INT",     "nullable": false, "index": "PK",  "sample": ["3", "7", "12"] },
+        { "name": "npi",          "type": "VARCHAR", "nullable": false, "index": "IDX", "sample": ["1234567890", "0987654321", "1122334455"] },
+        { "name": "name",         "type": "VARCHAR", "nullable": false, "index": null,  "sample": ["Dr. Sarah Chen", "Dr. James Park", "Dr. Priya Patel"] },
+        { "name": "specialty",    "type": "VARCHAR", "nullable": true,  "index": null,  "sample": ["Cardiology", "Internal Medicine", "Nephrology"] },
+        { "name": "department",   "type": "VARCHAR", "nullable": true,  "index": null,  "sample": ["Cardiology", "Med/Surg", "ICU"] }
+      ]
+    },
+    {
+      "name": "dim_date",
+      "layer": "WAREHOUSE",
+      "rowCount": 1826,
+      "description": "Date dimension: calendar attributes for time-based analysis",
+      "columns": [
+        { "name": "date_key",    "type": "INT",     "nullable": false, "index": "PK",  "sample": ["20260311", "20260310", "20260309"] },
+        { "name": "date",        "type": "DATE",    "nullable": false, "index": "IDX", "sample": ["2026-03-11", "2026-03-10", "2026-03-09"] },
+        { "name": "year",        "type": "INT",     "nullable": false, "index": null,  "sample": ["2026", "2026", "2026"] },
+        { "name": "quarter",     "type": "INT",     "nullable": false, "index": null,  "sample": ["1", "1", "1"] },
+        { "name": "month",       "type": "INT",     "nullable": false, "index": null,  "sample": ["3", "3", "3"] },
+        { "name": "is_weekend",  "type": "BOOLEAN", "nullable": false, "index": null,  "sample": ["false", "false", "false"] },
+        { "name": "is_holiday",  "type": "BOOLEAN", "nullable": false, "index": null,  "sample": ["false", "false", "false"] }
+      ]
+    },
+    {
+      "name": "stg_admissions",
+      "layer": "STAGING",
+      "rowCount": 51420,
+      "description": "Staging layer: raw EHR admissions after initial cleaning",
+      "columns": [
+        { "name": "raw_admission_id", "type": "VARCHAR",   "nullable": false, "index": "PK",  "sample": ["ADM-010000-001", "ADM-010001-001", "ADM-010002-001"] },
+        { "name": "patient_id",       "type": "VARCHAR",   "nullable": false, "index": "IDX", "sample": ["PAT-010000", "PAT-010001", "PAT-010002"] },
+        { "name": "admit_date",       "type": "DATE",      "nullable": false, "index": null,  "sample": ["2026-03-09", "2025-11-14", "2025-08-22"] },
+        { "name": "discharge_date",   "type": "DATE",      "nullable": true,  "index": null,  "sample": ["2026-03-14", "2025-11-20", null] },
+        { "name": "primary_icd10",    "type": "VARCHAR",   "nullable": true,  "index": null,  "sample": ["I50.30", "N17.9", "J18.9"] },
+        { "name": "dq_flags",         "type": "JSONB",     "nullable": true,  "index": null,  "sample": ["{}", "{\"warn\": [\"missing_zip\"]}", "{}"] },
+        { "name": "loaded_at",        "type": "TIMESTAMP", "nullable": false, "index": null,  "sample": ["2026-03-11 02:04:46", "2025-11-15 02:04:46", "2025-08-23 02:04:46"] }
+      ]
+    },
+    {
+      "name": "stg_patients",
+      "layer": "STAGING",
+      "rowCount": 9987,
+      "description": "Staging layer: raw EHR patient demographics after deduplication",
+      "columns": [
+        { "name": "raw_patient_id", "type": "VARCHAR",   "nullable": false, "index": "PK",  "sample": ["PAT-010000", "PAT-010001", "PAT-010002"] },
+        { "name": "dob",            "type": "DATE",      "nullable": true,  "index": null,  "sample": ["1948-06-12", "1955-03-28", "1962-09-04"] },
+        { "name": "gender",         "type": "VARCHAR",   "nullable": true,  "index": null,  "sample": ["M", "F", "M"] },
+        { "name": "zip_code",       "type": "VARCHAR",   "nullable": true,  "index": null,  "sample": ["94102", "94122", "94103"] },
+        { "name": "payer_type",     "type": "VARCHAR",   "nullable": true,  "index": null,  "sample": ["Medicare", "Medicaid", "Commercial"] },
+        { "name": "loaded_at",      "type": "TIMESTAMP", "nullable": false, "index": null,  "sample": ["2026-03-11 02:04:46", "2025-11-15 02:04:46", "2025-08-23 02:04:46"] }
+      ]
+    },
+    {
+      "name": "care_path_rules",
+      "layer": "ML/AI",
+      "rowCount": 847,
+      "description": "Association rules for care-path recommendations (Apriori algorithm)",
+      "columns": [
+        { "name": "rule_id",      "type": "UUID",      "nullable": false, "index": "PK",  "sample": ["r1a2b3c4-...", "r2b3c4d5-...", "r3c4d5e6-..."] },
+        { "name": "antecedent",   "type": "JSONB",     "nullable": false, "index": null,  "sample": ["{\"dx\": \"I50.30\"}", "{\"dx\": \"N17.9\"}", "{\"dx\": \"J18.9\"}"] },
+        { "name": "consequent",   "type": "JSONB",     "nullable": false, "index": null,  "sample": ["{\"action\": \"home_health\"}", "{\"action\": \"nephrology_consult\"}", "{\"action\": \"abx_prophylaxis\"}"] },
+        { "name": "support",      "type": "NUMERIC",   "nullable": true,  "index": null,  "sample": ["0.1230", "0.0890", "0.2100"] },
+        { "name": "confidence",   "type": "NUMERIC",   "nullable": true,  "index": null,  "sample": ["0.7800", "0.6500", "0.9100"] },
+        { "name": "lift",         "type": "NUMERIC",   "nullable": true,  "index": null,  "sample": ["2.3400", "1.9800", "3.1200"] },
+        { "name": "cohort_label", "type": "VARCHAR",   "nullable": true,  "index": null,  "sample": ["T4_CHF_AKI_High", "T3_Renal", "T1_Low_Risk"] },
+        { "name": "mined_at",     "type": "TIMESTAMP", "nullable": false, "index": null,  "sample": ["2024-10-20 16:00:00", "2024-11-20 16:00:00", "2025-01-20 16:00:00"] }
+      ]
+    },
+    {
+      "name": "audit_log",
+      "layer": "STAGING",
+      "rowCount": 14200,
+      "description": "HIPAA-compliant append-only audit trail for all PHI access events",
+      "columns": [
+        { "name": "audit_id",      "type": "UUID",      "nullable": false, "index": "PK",  "sample": ["a1b2c3d4-...", "b2c3d4e5-...", "c3d4e5f6-..."] },
+        { "name": "event_at",      "type": "TIMESTAMP", "nullable": false, "index": "IDX", "sample": ["2026-03-11 09:31:14", "2026-03-11 09:15:01", "2026-03-10 14:30:01"] },
+        { "name": "event_type",    "type": "VARCHAR",   "nullable": false, "index": "IDX", "sample": ["patient_data_access", "risk_score_computed", "alert_created"] },
+        { "name": "actor_user_id", "type": "VARCHAR",   "nullable": true,  "index": "IDX", "sample": ["dr.chen@careiq", "system", "coord.james@careiq"] },
+        { "name": "actor_role",    "type": "VARCHAR",   "nullable": true,  "index": null,  "sample": ["clinician", "system", "care_coordinator"] },
+        { "name": "patient_id",    "type": "VARCHAR",   "nullable": true,  "index": "IDX", "sample": ["PAT-010000", "PAT-010000", null] },
+        { "name": "resource_type", "type": "VARCHAR",   "nullable": true,  "index": null,  "sample": ["patient", "prediction", "alert"] },
+        { "name": "action",        "type": "VARCHAR",   "nullable": false, "index": null,  "sample": ["read", "create", "acknowledge"] },
+        { "name": "metadata",      "type": "JSONB",     "nullable": true,  "index": null,  "sample": ["{\"page\": \"patient_detail\"}", "{\"score\": 0.95}", "{}"] }
+      ]
+    },
+    {
+      "name": "schema_migrations",
+      "layer": "STAGING",
+      "rowCount": 6,
+      "description": "Custom migration tracking table: full history with business context and checksums",
+      "columns": [
+        { "name": "version",         "type": "VARCHAR",  "nullable": false, "index": "PK",  "sample": ["006", "005", "004"] },
+        { "name": "name",            "type": "VARCHAR",  "nullable": false, "index": null,  "sample": ["add_audit_infrastructure", "add_care_path_rules", "add_charlson_index"] },
+        { "name": "applied_at",      "type": "TIMESTAMP","nullable": false, "index": null,  "sample": ["2025-01-10 09:00:00", "2024-10-20 16:00:00", "2024-10-15 11:00:00"] },
+        { "name": "author",          "type": "VARCHAR",  "nullable": true,  "index": null,  "sample": ["platform-team", "ml-team", "data-team"] },
+        { "name": "description",     "type": "TEXT",     "nullable": true,  "index": null,  "sample": ["Add HIPAA audit log", "Add care path rules", "Add Charlson index"] },
+        { "name": "business_reason", "type": "TEXT",     "nullable": true,  "index": null,  "sample": ["HIPAA §164.312(b)", "Apriori mining", "SHAP #2 feature"] },
+        { "name": "sql_up",          "type": "TEXT",     "nullable": true,  "index": null,  "sample": ["CREATE TABLE audit_log...", "CREATE TABLE care_path_rules...", "ALTER TABLE dim_patient..."] },
+        { "name": "breaking_change", "type": "BOOLEAN",  "nullable": true,  "index": null,  "sample": ["false", "false", "false"] },
+        { "name": "rollback_safe",   "type": "BOOLEAN",  "nullable": true,  "index": null,  "sample": ["false", "true", "true"] },
+        { "name": "checksum",        "type": "VARCHAR",  "nullable": true,  "index": null,  "sample": ["f6a7b8c9d0e1", "e5f6a7b8c9d0", "d4e5f6a7b8c9"] }
+      ]
+    }
+  ]
+}

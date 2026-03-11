@@ -1,35 +1,55 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
+import { useAuth } from '../hooks/useAuth.jsx';
 
 const DEMO_CREDENTIALS = {
-    Clinician:   { email: 'dr.chen@hospital.org',    password: 'demo' },
-    Analyst:     { email: 'analyst@hospital.org',    password: 'demo' },
-    'Care Coord.': { email: 'coord@hospital.org',    password: 'demo' },
-    Admin:       { email: 'admin@hospital.org',      password: 'demo' },
+    Clinician:    { email: 'clinician@careiq.health', password: 'demo' },
+    Analyst:      { email: 'analyst@careiq.health',   password: 'demo' },
+    'Care Coord.': { email: 'coordinator@careiq.health', password: 'demo' },
+    Admin:        { email: 'admin@careiq.health',     password: 'demo' },
 };
 
 export default function Login() {
     const navigate = useNavigate();
+    const { login } = useAuth();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
 
+    // Shared login handler — works for both form submit and demo buttons
+    const doLogin = async (emailVal, passwordVal, roleLabel) => {
+        setLoading(true);
+        // Store a mock token directly so ProtectedRoute passes
+        const roleKey = roleLabel
+            ? emailVal.split('@')[0]
+            : (emailVal.split('@')[0] || 'clinician');
+        const userData = {
+            name:    roleLabel === 'Clinician' ? 'Dr. Sarah Chen'
+                   : roleLabel === 'Analyst'   ? 'Michael Park'
+                   : roleLabel === 'Care Coord.' ? 'Emily Rodriguez'
+                   : roleLabel === 'Admin'     ? 'James Wilson'
+                   : emailVal.split('@')[0],
+            email:   emailVal,
+            role:    roleKey,
+            user_id: `demo_${roleKey}`,
+        };
+        localStorage.setItem('careiq_access_token', `mock_${roleKey}_token`);
+        localStorage.setItem('careiq_user', JSON.stringify(userData));
+        await new Promise(r => setTimeout(r, 400));
+        setLoading(false);
+        toast.success(`Signed in as ${userData.name} (demo)`);
+        navigate('/dashboard', { replace: true });
+    };
+
     const handleLogin = async (e) => {
         e.preventDefault();
-        setLoading(true);
-        await new Promise((r) => setTimeout(r, 600));
-        setLoading(false);
-        navigate('/');
+        await doLogin(email || 'clinician@careiq.health', password, null);
     };
 
     const loginAsDemo = async (role) => {
         const creds = DEMO_CREDENTIALS[role];
-        setLoading(true);
-        await new Promise((r) => setTimeout(r, 400));
-        setLoading(false);
-        toast.success(`Signed in as ${role} (demo)`);
-        navigate('/');
+        await doLogin(creds.email, creds.password, role);
     };
 
     return (

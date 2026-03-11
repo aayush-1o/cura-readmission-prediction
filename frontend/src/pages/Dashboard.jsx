@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
-    Activity, AlertTriangle, TrendingDown, Target,
+    Activity, AlertTriangle, TrendingDown, Target, DollarSign,
     ChevronRight,
 } from 'lucide-react';
 import {
@@ -144,6 +144,19 @@ export default function Dashboard() {
                     isLoading={summaryLoading}
                     startDelay={300}
                 />
+                {/* BUG-018 FIX: Add cost KPI tile — total_cost_30d was computed but never shown */}
+                <MetricTile
+                    label="Est. 30-Day Cost"
+                    value={summary?.total_cost_30d != null ? `$${(summary.total_cost_30d / 1_000_000).toFixed(1)}M` : '—'}
+                    format="text"
+                    trend={-2.3}
+                    trendLabel="vs last period"
+                    trendPositiveIsGood={false}
+                    sparkData={[]}
+                    icon={DollarSign}
+                    isLoading={summaryLoading}
+                    startDelay={400}
+                />
             </div>
 
             {/* ── Main body: chart (left) + risk dist (right) ────────────── */}
@@ -236,11 +249,12 @@ export default function Dashboard() {
                             marginTop: 16,
                         }}
                     >
+                        {/* BUG-012 FIX: Real data from API, not hardcoded strings */}
                         {[
-                            { label: 'Total Admissions', value: '2,847' },
-                            { label: 'Readmissions',     value: '418'   },
-                            { label: 'Est. Prevented',   value: '63'    },
-                            { label: 'Avg LOS',          value: '4.2d'  },
+                            { label: 'Total Admissions', value: summary?.total_admissions_30d?.toLocaleString() ?? '—' },
+                            { label: 'Readmissions',     value: summary?.total_readmissions_30d?.toLocaleString() ?? '—' },
+                            { label: 'High-Risk Today',  value: summary?.high_risk_patients_today?.toLocaleString() ?? '—' },
+                            { label: 'Avg LOS',          value: summary?.avg_los_days ? `${summary.avg_los_days.toFixed(1)}d` : '—' },
                         ].map(({ label, value }) => (
                             <div
                                 key={label}
@@ -299,8 +313,8 @@ export default function Dashboard() {
                                         fill: C.textPrimary,
                                     }}
                                 />
-                                {riskDistData.map((entry, i) => (
-                                    <Cell key={i} fill={entry.color} />
+                                {riskDistData.map((entry) => (
+                                    <Cell key={entry.tier} fill={entry.color} />
                                 ))}
                             </Bar>
                         </BarChart>

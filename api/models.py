@@ -283,10 +283,11 @@ class DashboardSummary(CareIQBaseModel):
     """
     total_patients: int
     total_admissions_30d: int
+    total_readmissions_30d: int = 0          # BUG-012 FIX: computed from rate × admissions
     avg_readmission_rate_pct: float
     avg_los_days: float
     high_risk_patients_today: int
     avg_risk_score: float
-    total_cost_30d: float
+    total_cost_30d: float                    # BUG-018: kept — displayed in cost KPI tile
     department_count: int
     as_of: str   # ISO timestamp of data freshness

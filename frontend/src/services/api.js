@@ -2,7 +2,7 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 
 // ─── Axios instance ──────────────────────────────────────────────────────────
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 export const apiClient = axios.create({
     baseURL: BASE_URL,
@@ -104,4 +104,10 @@ export const api = {
     getClusterProfiles: () => apiClient.get('/api/v1/recommendations/clusters/profiles'),
     getSimilarPatients: (patientId, n = 5) =>
         apiClient.get(`/api/v1/recommendations/patients/${patientId}/similar`, { params: { n } }),
+
+    // Reports
+    listReports: (params) => apiClient.get('/api/v1/reports', { params }),
+    generateReport: (body) => apiClient.post('/api/v1/reports/generate', body),
+    getReportJob: (jobId) => apiClient.get(`/api/v1/reports/jobs/${jobId}`),
+    downloadReport: (jobId, fmt) => apiClient.get(`/api/v1/reports/jobs/${jobId}/download/${fmt}`, { responseType: 'blob' }),
 };

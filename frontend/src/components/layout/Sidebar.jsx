@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
     LayoutDashboard, AlertTriangle, Users,
-    BarChart2, FileText, Settings, LogOut, ChevronLeft,
+    BarChart2, FileText, Settings, LogOut, ChevronLeft, Database, Bell, ScrollText,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth.jsx';
 
@@ -13,8 +13,11 @@ const PRIMARY_NAV = [
     { label: 'Patients',   to: '/patients',   icon: Users },
 ];
 const ANALYTICS_NAV = [
-    { label: 'Analytics', to: '/analytics', icon: BarChart2 },
-    { label: 'Reports',   to: '/reports',   icon: FileText },
+    { label: 'Analytics',    to: '/analytics',     icon: BarChart2 },
+    { label: 'Reports',      to: '/reports',       icon: FileText },
+    { label: 'Data Platform',to: '/data-platform', icon: Database, pipelineAlert: true },
+    { label: 'Alerts',       to: '/alerts',        icon: Bell,     criticalAlert: true },
+    { label: 'Audit Log',    to: '/audit-log',     icon: ScrollText, adminOnly: true },
 ];
 
 /* ─── Role accent colours ────────────────────────────────────────────────── */
@@ -132,9 +135,11 @@ const S = {
 };
 
 /* ─── NavItem ───────────────────────────────────────────────────────────── */
-function NavItem({ item, collapsed, criticalCount }) {
-    const { label, to, icon: Icon, badge } = item;
+function NavItem({ item, collapsed, criticalCount, hasPipelineFailure }) {
+    const { label, to, icon: Icon, badge, pipelineAlert, criticalAlert, adminOnly } = item;
     const showBadge = badge && criticalCount > 0;
+    const showPipelineAlert = pipelineAlert && hasPipelineFailure;
+    const showCriticalBadge = criticalAlert && criticalCount > 0;
 
     return (
         <NavLink
@@ -200,6 +205,78 @@ function NavItem({ item, collapsed, criticalCount }) {
                             {criticalCount}
                         </span>
                     )}
+                    {!collapsed && showPipelineAlert && (
+                        <span style={{
+                            background: 'var(--risk-high)',
+                            color: '#FFFFFF',
+                            fontSize: 9,
+                            fontWeight: 800,
+                            fontFamily: "'DM Mono', monospace",
+                            width: 14, height: 14,
+                            borderRadius: '50%',
+                            flexShrink: 0,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}>
+                            !
+                        </span>
+                    )}
+                    {!collapsed && showCriticalBadge && (
+                        <span style={{
+                            background: 'var(--risk-critical)',
+                            color: '#FFFFFF',
+                            fontSize: 10,
+                            fontWeight: 700,
+                            fontFamily: "'DM Mono', monospace",
+                            padding: '1px 6px',
+                            borderRadius: 'var(--radius-pill)',
+                            flexShrink: 0,
+                            minWidth: 18,
+                            textAlign: 'center',
+                        }}>
+                            {criticalCount}
+                        </span>
+                    )}
+                    {!collapsed && adminOnly && (
+                        <span style={{
+                            background: '#DC2626',
+                            color: '#FFFFFF',
+                            fontSize: 8.5,
+                            fontWeight: 800,
+                            letterSpacing: '0.06em',
+                            textTransform: 'uppercase',
+                            fontFamily: "'DM Mono', monospace",
+                            padding: '1px 5px',
+                            borderRadius: 'var(--radius-pill)',
+                            flexShrink: 0,
+                        }}>
+                            ADMIN
+                        </span>
+                    )}
+                    {collapsed && showCriticalBadge && (
+                        <span style={{
+                            position: 'absolute',
+                            top: 4, right: 4,
+                            minWidth: 14, height: 14,
+                            borderRadius: 'var(--radius-pill)',
+                            background: 'var(--risk-critical)',
+                            color: '#fff',
+                            fontSize: 8,
+                            fontWeight: 800,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            padding: '0 3px',
+                        }}>
+                            {criticalCount}
+                        </span>
+                    )}
+                    {collapsed && showPipelineAlert && (
+                        <span style={{
+                            position: 'absolute',
+                            top: 4, right: 4,
+                            width: 6, height: 6,
+                            borderRadius: '50%',
+                            background: 'var(--risk-high)',
+                        }} />
+                    )}
 
                     {/* Collapsed tooltip */}
                     {collapsed && (
@@ -238,6 +315,9 @@ function NavItem({ item, collapsed, criticalCount }) {
 export default function Sidebar({ collapsed, onToggle, criticalCount = 0 }) {
     const { user, logout } = useAuth();
     const [hovered, setHovered] = useState(false);
+    // TODO (Phase 7): Fetch real pipeline health and set this via API
+    // e.g. fetch('/api/v1/data-platform/pipelines').then(check for any failed status)
+    const [hasPipelineAlert, setHasPipelineAlert] = useState(false); // eslint-disable-line no-unused-vars
 
     const sidebarW = collapsed ? 54 : 216;
     const roleColor = ROLE_COLOR[user?.role] || 'var(--accent-primary)';
@@ -298,6 +378,7 @@ export default function Sidebar({ collapsed, onToggle, criticalCount = 0 }) {
                         item={item}
                         collapsed={collapsed}
                         criticalCount={criticalCount}
+                        hasPipelineFailure={false}
                     />
                 ))}
 
@@ -312,18 +393,21 @@ export default function Sidebar({ collapsed, onToggle, criticalCount = 0 }) {
                         key={item.to}
                         item={item}
                         collapsed={collapsed}
-                        criticalCount={0}
+                        criticalCount={criticalCount}
+                        hasPipelineFailure={hasPipelineAlert}
                     />
                 ))}
 
                 {/* Divider before settings */}
                 <div style={S.divider} />
 
-                <NavItem
+                {/* TODO (BUG-014 / Phase 7): Settings page not yet implemented.
+                    Commented out to avoid confusing redirect to /dashboard. */}
+                {/* <NavItem
                     item={{ label: 'Settings', to: '/settings', icon: Settings }}
                     collapsed={collapsed}
                     criticalCount={0}
-                />
+                /> */}
             </nav>
 
             {/* ── User Card ────────────────────────────────────────────── */}

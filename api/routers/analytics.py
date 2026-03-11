@@ -48,11 +48,19 @@ async def get_dashboard_summary(
     if cached:
         return DashboardSummary(**cached)
 
-    df = execute_query(
+    # BUG-007 FIX: wrap sync execute_query in run_in_executor to avoid blocking the
+    # async event loop. Full fix = migrate to asyncpg + SQLAlchemy async (see runbook.md).
+    import asyncio
+    from functools import partial
+    loop = asyncio.get_event_loop()
+
+    df = await loop.run_in_executor(None, partial(
+        execute_query,
         """
         SELECT
             COUNT(DISTINCT patient_id)                          AS total_patients,
             COUNT(*)                                            AS total_admissions_30d,
+            SUM(readmit_30day_flag::INT)                        AS total_readmissions_30d,
             ROUND(AVG(readmit_30day_flag::INT)::NUMERIC * 100, 2) AS avg_readmission_rate_pct,
             ROUND(AVG(length_of_stay_days)::NUMERIC, 2)        AS avg_los_days,
             ROUND(AVG(total_charges)::NUMERIC, 2)              AS avg_cost_usd,
@@ -60,35 +68,40 @@ async def get_dashboard_summary(
         FROM stg_admissions
         WHERE admission_date >= CURRENT_DATE - INTERVAL '30 days'
         """,
-        read_only=True,
-    )
+        None,
+        True,
+    ))
 
-    high_risk_df = execute_query(
-        """
-        SELECT COUNT(*) AS high_risk_today
-        FROM mv_high_risk_patients_today
-        """,
-        read_only=True,
-    )
+    high_risk_df = await loop.run_in_executor(None, partial(
+        execute_query,
+        "SELECT COUNT(*) AS high_risk_today FROM mv_high_risk_patients_today",
+        None,
+        True,
+    ))
 
-    dept_count_df = execute_query(
+    dept_count_df = await loop.run_in_executor(None, partial(
+        execute_query,
         "SELECT COUNT(DISTINCT department) AS dept_count FROM stg_admissions",
-        read_only=True,
-    )
+        None,
+        True,
+    ))
 
-    avg_risk_df = execute_query(
+    avg_risk_df = await loop.run_in_executor(None, partial(
+        execute_query,
         """
         SELECT ROUND(AVG(readmission_risk_score)::NUMERIC, 4) AS avg_risk_score
         FROM fact_predictions
         WHERE predicted_at >= NOW() - INTERVAL '24 hours'
         """,
-        read_only=True,
-    )
+        None,
+        True,
+    ))
 
     row = df.iloc[0].to_dict() if not df.empty else {}
     result = DashboardSummary(
         total_patients=int(row.get("total_patients") or 0),
         total_admissions_30d=int(row.get("total_admissions_30d") or 0),
+        total_readmissions_30d=int(row.get("total_readmissions_30d") or 0),  # BUG-012 FIX
         avg_readmission_rate_pct=float(row.get("avg_readmission_rate_pct") or 0),
         avg_los_days=float(row.get("avg_los_days") or 0),
         high_risk_patients_today=int(high_risk_df.iloc[0]["high_risk_today"]) if not high_risk_df.empty else 0,

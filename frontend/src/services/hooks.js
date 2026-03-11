@@ -1,4 +1,4 @@
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, keepPreviousData } from '@tanstack/react-query';
 import { api } from './api.js';
 import {
     mockDashboard, mockTrends, mockHighRiskPatients,
@@ -74,7 +74,10 @@ export function useSparklines() {
     return { data: mockSparklines, isLoading: false };
 }
 
+
 // ─── Patient hooks ────────────────────────────────────────────────────────────
+// NOTE: keepPreviousData was removed in @tanstack/react-query v5.
+// Use placeholderData: keepPreviousData (imported at top of file) instead.
 
 export function usePatients(params = {}) {
     return useQuery({
@@ -87,7 +90,7 @@ export function usePatients(params = {}) {
             const res = await api.listPatients(params);
             return res.data;
         },
-        keepPreviousData: true,
+        placeholderData: keepPreviousData,
     });
 }
 
@@ -157,5 +160,32 @@ export function useClusterProfiles() {
             return res.data;
         },
         staleTime: 30 * 60 * 1000,
+    });
+}
+
+// ─── Reports hooks ────────────────────────────────────────────────────────────
+
+export function useReports(params = {}) {
+    return useQuery({
+        queryKey: ['reports', 'list', params],
+        queryFn: async () => {
+            if (USE_MOCK) {
+                // Return the same seed data in mock mode
+                const { default: SEED } = await import('../pages/Reports.jsx').catch(() => ({ default: null }));
+                // Fallback: inline seed so hook works independently of Reports.jsx
+                return [
+                    { job_id: 'a1b2c3d4-0001', report_type: 'high_risk_daily',         name: 'High-Risk Patient Daily Brief',  created_at: '2026-03-11T06:00:00', status: 'complete', progress: 100, file_size_bytes: 250880,  formats: ['pdf', 'csv'], is_seed: true },
+                    { job_id: 'a1b2c3d4-0002', report_type: 'dept_readmission_monthly', name: 'Department Readmission Report',  created_at: '2026-03-10T18:00:00', status: 'complete', progress: 100, file_size_bytes: 1258291, formats: ['pdf'],        is_seed: true },
+                    { job_id: 'a1b2c3d4-0003', report_type: 'patient_care_plan',        name: 'Care Plan: PAT-010000',          created_at: '2026-03-11T09:31:00', status: 'complete', progress: 100, file_size_bytes: 91136,   formats: ['pdf'],        is_seed: true },
+                    { job_id: 'a1b2c3d4-0004', report_type: 'model_performance_weekly', name: 'Model Performance Wk 10',       created_at: '2026-03-10T07:00:00', status: 'complete', progress: 100, file_size_bytes: 421888,  formats: ['pdf'],        is_seed: true },
+                    { job_id: 'a1b2c3d4-0005', report_type: 'high_risk_daily',         name: 'High-Risk Patient Daily Brief',  created_at: '2026-03-10T06:00:00', status: 'complete', progress: 100, file_size_bytes: 243712,  formats: ['pdf', 'csv'], is_seed: true },
+                    { job_id: 'a1b2c3d4-0006', report_type: 'pipeline_sla_weekly',     name: 'Pipeline SLA Week 10',           created_at: '2026-03-10T07:00:00', status: 'generating', progress: 45, file_size_bytes: null,  formats: ['pdf', 'csv'], is_seed: true },
+                ];
+            }
+            const res = await api.listReports(params);
+            return res.data;
+        },
+        refetchInterval: 30 * 1000, // refresh every 30s to catch newly completed jobs
+        staleTime: 10 * 1000,
     });
 }

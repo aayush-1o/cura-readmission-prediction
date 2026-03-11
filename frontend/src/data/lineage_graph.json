@@ -1,0 +1,660 @@
+{
+  "nodes": [
+    {
+      "id": "patients_csv",
+      "layer": "source",
+      "name": "patients.csv",
+      "rowCount": 10000,
+      "droppedRows": 0,
+      "lastUpdated": "2h ago",
+      "schema": [
+        {"col": "patient_id",  "type": "VARCHAR", "note": "PII — masked in staging"},
+        {"col": "date_of_birth","type": "DATE",    "note": "PII — hashed in staging"},
+        {"col": "gender",      "type": "CHAR(1)",  "note": ""},
+        {"col": "ethnicity",   "type": "VARCHAR",  "note": ""},
+        {"col": "zip_code",    "type": "CHAR(5)",  "note": "PII — truncated to first 3"},
+        {"col": "insurance",   "type": "VARCHAR",  "note": ""}
+      ],
+      "sampleRows": [
+        {"patient_id": "P-00001", "gender": "F", "ethnicity": "Hispanic", "zip_code": "90210"},
+        {"patient_id": "P-00002", "gender": "M", "ethnicity": "White",    "zip_code": "10001"},
+        {"patient_id": "P-00003", "gender": "F", "ethnicity": "Black",    "zip_code": "60601"}
+      ],
+      "upstream": [],
+      "downstream": ["stg_patients"],
+      "impact": []
+    },
+    {
+      "id": "admissions_csv",
+      "layer": "source",
+      "name": "admissions.csv",
+      "rowCount": 51420,
+      "droppedRows": 0,
+      "lastUpdated": "2h ago",
+      "schema": [
+        {"col": "admission_id",   "type": "VARCHAR", "note": "PK"},
+        {"col": "patient_id",     "type": "VARCHAR", "note": "FK"},
+        {"col": "admit_date",     "type": "DATE",    "note": ""},
+        {"col": "discharge_date", "type": "DATE",    "note": ""},
+        {"col": "department",     "type": "VARCHAR", "note": ""},
+        {"col": "primary_icd",    "type": "CHAR(7)", "note": "ICD-10"}
+      ],
+      "sampleRows": [
+        {"admission_id": "A-0001", "patient_id": "P-00001", "department": "Cardiology", "admit_date": "2026-03-09"},
+        {"admission_id": "A-0002", "patient_id": "P-00002", "department": "Nephrology", "admit_date": "2026-03-08"},
+        {"admission_id": "A-0003", "patient_id": "P-00003", "department": "ICU",        "admit_date": "2026-03-10"}
+      ],
+      "upstream": [],
+      "downstream": ["stg_admissions"],
+      "impact": []
+    },
+    {
+      "id": "diagnoses_csv",
+      "layer": "source",
+      "name": "diagnoses.csv",
+      "rowCount": 82340,
+      "droppedRows": 0,
+      "lastUpdated": "2h ago",
+      "schema": [
+        {"col": "diagnosis_id",  "type": "VARCHAR", "note": "PK"},
+        {"col": "admission_id",  "type": "VARCHAR", "note": "FK"},
+        {"col": "icd_code",      "type": "CHAR(7)", "note": "ICD-10"},
+        {"col": "diagnosis_seq", "type": "INT",     "note": "1=primary"},
+        {"col": "poa_flag",      "type": "BOOL",    "note": "Present on admission"}
+      ],
+      "sampleRows": [
+        {"icd_code": "I50.9",  "diagnosis_seq": 1, "poa_flag": true},
+        {"icd_code": "E11.9",  "diagnosis_seq": 2, "poa_flag": true},
+        {"icd_code": "N18.3",  "diagnosis_seq": 1, "poa_flag": false}
+      ],
+      "upstream": [],
+      "downstream": ["stg_diagnoses"],
+      "impact": []
+    },
+    {
+      "id": "procedures_csv",
+      "layer": "source",
+      "name": "procedures.csv",
+      "rowCount": 47100,
+      "droppedRows": 0,
+      "lastUpdated": "2h ago",
+      "schema": [
+        {"col": "procedure_id",  "type": "VARCHAR", "note": "PK"},
+        {"col": "admission_id",  "type": "VARCHAR", "note": "FK"},
+        {"col": "cpt_code",      "type": "CHAR(5)", "note": "CPT-4"},
+        {"col": "procedure_date","type": "DATE",    "note": ""},
+        {"col": "cost_usd",      "type": "NUMERIC", "note": "Billed"}
+      ],
+      "sampleRows": [
+        {"cpt_code": "99213", "procedure_date": "2026-03-09", "cost_usd": 145.00},
+        {"cpt_code": "71046", "procedure_date": "2026-03-08", "cost_usd": 320.00},
+        {"cpt_code": "93000", "procedure_date": "2026-03-10", "cost_usd": 85.00}
+      ],
+      "upstream": [],
+      "downstream": ["stg_procedures"],
+      "impact": []
+    },
+    {
+      "id": "vitals_csv",
+      "layer": "source",
+      "name": "vitals.csv",
+      "rowCount": 298400,
+      "droppedRows": 0,
+      "lastUpdated": "2h ago",
+      "schema": [
+        {"col": "vital_id",      "type": "UUID",    "note": "PK"},
+        {"col": "admission_id",  "type": "VARCHAR", "note": "FK"},
+        {"col": "measured_at",   "type": "TIMESTAMP","note": ""},
+        {"col": "vital_type",    "type": "VARCHAR", "note": "HR/BP/SpO2/Temp"},
+        {"col": "value_numeric", "type": "NUMERIC", "note": ""},
+        {"col": "unit",          "type": "VARCHAR", "note": ""}
+      ],
+      "sampleRows": [
+        {"vital_type": "HR",   "value_numeric": 88,   "unit": "bpm"},
+        {"vital_type": "SpO2", "value_numeric": 97,   "unit": "%"},
+        {"vital_type": "BP_S", "value_numeric": 138,  "unit": "mmHg"}
+      ],
+      "upstream": [],
+      "downstream": ["stg_vitals"],
+      "impact": []
+    },
+    {
+      "id": "medications_csv",
+      "layer": "source",
+      "name": "medications.csv",
+      "rowCount": 134200,
+      "droppedRows": 0,
+      "lastUpdated": "2h ago",
+      "schema": [
+        {"col": "med_id",        "type": "UUID",    "note": "PK"},
+        {"col": "admission_id",  "type": "VARCHAR", "note": "FK"},
+        {"col": "ndc_code",      "type": "CHAR(11)","note": "NDC drug code"},
+        {"col": "dose_mg",       "type": "NUMERIC", "note": ""},
+        {"col": "route",         "type": "VARCHAR", "note": "PO/IV/SQ"},
+        {"col": "administered_at","type": "TIMESTAMP","note": ""}
+      ],
+      "sampleRows": [
+        {"ndc_code": "50242-062-01", "dose_mg": 40, "route": "PO"},
+        {"ndc_code": "00310-0370-10","dose_mg": 10, "route": "IV"},
+        {"ndc_code": "00006-0060-54","dose_mg": 25, "route": "SQ"}
+      ],
+      "upstream": [],
+      "downstream": ["fact_admissions"],
+      "impact": []
+    },
+
+    {
+      "id": "stg_patients",
+      "layer": "staging",
+      "name": "stg_patients",
+      "rowCount": 9987,
+      "droppedRows": 13,
+      "droppedReason": "DQ fail: missing gender or duplicate patient_id",
+      "lastUpdated": "2h ago",
+      "transformationSQL": "SELECT\n  md5(patient_id) AS patient_key,  -- PII hash\n  gender, ethnicity,\n  LEFT(zip_code, 3) AS zip3,  -- zip truncation\n  insurance,\n  DATE_PART('year', AGE(date_of_birth)) AS age_years\nFROM patients\nWHERE patient_id IS NOT NULL\n  AND gender IN ('M','F','O')",
+      "schema": [
+        {"col": "patient_key",  "type": "VARCHAR", "note": "MD5 hash of patient_id"},
+        {"col": "gender",       "type": "CHAR(1)",  "note": "M/F/O"},
+        {"col": "age_years",    "type": "INT",      "note": "Derived"},
+        {"col": "zip3",         "type": "CHAR(3)",  "note": "Truncated for privacy"},
+        {"col": "insurance",    "type": "VARCHAR",  "note": ""}
+      ],
+      "sampleRows": [
+        {"patient_key": "a3f5...", "gender": "F", "age_years": 67, "zip3": "902"},
+        {"patient_key": "b7c2...", "gender": "M", "age_years": 54, "zip3": "100"},
+        {"patient_key": "e91a...", "gender": "F", "age_years": 72, "zip3": "606"}
+      ],
+      "upstream": ["patients_csv"],
+      "downstream": ["dim_patient"],
+      "impact": ["If this fails: dim_patient has stale data, Charlson scores may be wrong"]
+    },
+    {
+      "id": "stg_admissions",
+      "layer": "staging",
+      "name": "stg_admissions",
+      "rowCount": 51420,
+      "droppedRows": 0,
+      "lastUpdated": "2h ago",
+      "transformationSQL": "SELECT\n  admission_id,\n  md5(patient_id) AS patient_key,\n  admit_date, discharge_date,\n  DATEDIFF('day', admit_date, discharge_date) AS los_days,\n  department, primary_icd,\n  CASE WHEN discharge_date IS NULL THEN TRUE ELSE FALSE END AS is_active\nFROM admissions\nWHERE admission_id IS NOT NULL",
+      "schema": [
+        {"col": "admission_id",  "type": "VARCHAR", "note": "PK"},
+        {"col": "patient_key",   "type": "VARCHAR", "note": "FK → stg_patients"},
+        {"col": "admit_date",    "type": "DATE",    "note": ""},
+        {"col": "los_days",      "type": "INT",     "note": "Derived: discharge − admit"},
+        {"col": "department",    "type": "VARCHAR", "note": ""},
+        {"col": "is_active",     "type": "BOOL",    "note": "Current admission"}
+      ],
+      "sampleRows": [
+        {"admission_id": "A-0001", "los_days": 3, "department": "Cardiology", "is_active": false},
+        {"admission_id": "A-0002", "los_days": 5, "department": "Nephrology", "is_active": false},
+        {"admission_id": "A-0003", "los_days": 0, "department": "ICU",        "is_active": true}
+      ],
+      "upstream": ["admissions_csv"],
+      "downstream": ["fact_admissions"],
+      "impact": ["If this fails: fact_admissions upsert fails, all downstream marts stale"]
+    },
+    {
+      "id": "stg_diagnoses",
+      "layer": "staging",
+      "name": "stg_diagnoses",
+      "rowCount": 82100,
+      "droppedRows": 240,
+      "droppedReason": "Invalid ICD-10 codes (not in reference table)",
+      "lastUpdated": "2h ago",
+      "transformationSQL": "SELECT d.*\nFROM diagnoses d\nINNER JOIN icd10_reference r ON d.icd_code = r.icd_code\nWHERE d.diagnosis_seq <= 10",
+      "schema": [
+        {"col": "diagnosis_id",  "type": "VARCHAR", "note": "PK"},
+        {"col": "admission_id",  "type": "VARCHAR", "note": "FK"},
+        {"col": "icd_code",      "type": "CHAR(7)", "note": "Validated ICD-10"},
+        {"col": "diagnosis_seq", "type": "INT",     "note": "1=primary"},
+        {"col": "poa_flag",      "type": "BOOL",    "note": ""}
+      ],
+      "sampleRows": [
+        {"icd_code": "I50.9", "diagnosis_seq": 1},
+        {"icd_code": "E11.9", "diagnosis_seq": 2},
+        {"icd_code": "N18.3", "diagnosis_seq": 1}
+      ],
+      "upstream": ["diagnoses_csv"],
+      "downstream": ["dim_diagnosis", "fact_admissions"],
+      "impact": ["If this fails: Charlson comorbidity index cannot be computed"]
+    },
+    {
+      "id": "stg_procedures",
+      "layer": "staging",
+      "name": "stg_procedures",
+      "rowCount": 47100,
+      "droppedRows": 0,
+      "lastUpdated": "2h ago",
+      "transformationSQL": "SELECT procedure_id, admission_id, cpt_code,\n  procedure_date, COALESCE(cost_usd, 0) AS cost_usd\nFROM procedures",
+      "schema": [
+        {"col": "procedure_id",   "type": "VARCHAR", "note": "PK"},
+        {"col": "admission_id",   "type": "VARCHAR", "note": "FK"},
+        {"col": "cpt_code",       "type": "CHAR(5)", "note": ""},
+        {"col": "procedure_date", "type": "DATE",    "note": ""},
+        {"col": "cost_usd",       "type": "NUMERIC", "note": "0 if null"}
+      ],
+      "sampleRows": [
+        {"cpt_code": "99213", "cost_usd": 145.00},
+        {"cpt_code": "71046", "cost_usd": 320.00},
+        {"cpt_code": "93000", "cost_usd": 85.00}
+      ],
+      "upstream": ["procedures_csv"],
+      "downstream": ["dim_procedure"],
+      "impact": []
+    },
+    {
+      "id": "stg_vitals",
+      "layer": "staging",
+      "name": "stg_vitals",
+      "rowCount": 298400,
+      "droppedRows": 0,
+      "lastUpdated": "2h ago",
+      "transformationSQL": "SELECT *,\n  CASE WHEN vital_type='HR' AND value_numeric > 120 THEN TRUE\n       WHEN vital_type='SpO2' AND value_numeric < 92 THEN TRUE\n       ELSE FALSE END AS is_anomaly\nFROM vitals",
+      "schema": [
+        {"col": "vital_id",      "type": "UUID",     "note": "PK"},
+        {"col": "admission_id",  "type": "VARCHAR",  "note": "FK"},
+        {"col": "vital_type",    "type": "VARCHAR",  "note": ""},
+        {"col": "value_numeric", "type": "NUMERIC",  "note": ""},
+        {"col": "is_anomaly",    "type": "BOOL",     "note": "Derived: out-of-range flag"}
+      ],
+      "sampleRows": [
+        {"vital_type": "HR",   "value_numeric": 88,  "is_anomaly": false},
+        {"vital_type": "SpO2", "value_numeric": 88,  "is_anomaly": true},
+        {"vital_type": "BP_S", "value_numeric": 142, "is_anomaly": false}
+      ],
+      "upstream": ["vitals_csv"],
+      "downstream": ["fact_vitals"],
+      "impact": ["If this fails: vital anomaly alerts will not fire"]
+    },
+
+    {
+      "id": "dim_patient",
+      "layer": "warehouse",
+      "name": "dim_patient",
+      "rowCount": 9987,
+      "droppedRows": 0,
+      "lastUpdated": "2h ago",
+      "note": "Charlson comorbidity index computed",
+      "transformationSQL": "-- SCD Type 1 upsert with Charlson score\nMERGE INTO dim_patient AS t\nUSING stg_patients AS s ON t.patient_key = s.patient_key\nWHEN MATCHED THEN UPDATE SET ...\nWHEN NOT MATCHED THEN INSERT ...",
+      "schema": [
+        {"col": "patient_key",    "type": "VARCHAR", "note": "PK"},
+        {"col": "gender",         "type": "CHAR(1)",  "note": ""},
+        {"col": "age_years",      "type": "INT",      "note": ""},
+        {"col": "zip3",           "type": "CHAR(3)",  "note": ""},
+        {"col": "charlson_score", "type": "INT",      "note": "Comorbidity index 0–37"},
+        {"col": "risk_tier",      "type": "VARCHAR",  "note": "low/medium/high/critical"}
+      ],
+      "sampleRows": [
+        {"patient_key": "a3f5...", "age_years": 67, "charlson_score": 4, "risk_tier": "high"},
+        {"patient_key": "b7c2...", "age_years": 54, "charlson_score": 1, "risk_tier": "low"},
+        {"patient_key": "e91a...", "age_years": 72, "charlson_score": 7, "risk_tier": "critical"}
+      ],
+      "upstream": ["stg_patients"],
+      "downstream": ["fact_admissions", "mart_risk_features"],
+      "impact": ["If this fails: ML features missing Charlson score → model AUC degrades", "Dashboard age/gender breakdowns unavailable"]
+    },
+    {
+      "id": "dim_diagnosis",
+      "layer": "warehouse",
+      "name": "dim_diagnosis",
+      "rowCount": 1247,
+      "droppedRows": 0,
+      "lastUpdated": "2h ago",
+      "note": "1,247 unique ICD-10 codes, categorized",
+      "schema": [
+        {"col": "icd_code",      "type": "CHAR(7)", "note": "PK"},
+        {"col": "description",   "type": "TEXT",    "note": ""},
+        {"col": "category",      "type": "VARCHAR", "note": "CCS category"},
+        {"col": "is_chronic",    "type": "BOOL",    "note": "Charlson relevant"},
+        {"col": "system",        "type": "VARCHAR", "note": "Cardiovascular/Respiratory/..."}
+      ],
+      "sampleRows": [
+        {"icd_code": "I50.9", "category": "Heart failure", "is_chronic": true},
+        {"icd_code": "E11.9", "category": "Type 2 diabetes", "is_chronic": true},
+        {"icd_code": "N18.3", "category": "CKD stage 3",    "is_chronic": true}
+      ],
+      "upstream": ["stg_diagnoses"],
+      "downstream": ["fact_admissions"],
+      "impact": ["If this fails: readmission risk model loses comorbidity features"]
+    },
+    {
+      "id": "dim_procedure",
+      "layer": "warehouse",
+      "name": "dim_procedure",
+      "rowCount": 412,
+      "droppedRows": 0,
+      "lastUpdated": "2h ago",
+      "note": "412 unique CPT codes",
+      "schema": [
+        {"col": "cpt_code",    "type": "CHAR(5)", "note": "PK"},
+        {"col": "description", "type": "TEXT",    "note": ""},
+        {"col": "category",    "type": "VARCHAR", "note": "Surgical/Diagnostic/..."},
+        {"col": "avg_cost",    "type": "NUMERIC", "note": "Historical average"}
+      ],
+      "sampleRows": [
+        {"cpt_code": "99213", "category": "E&M", "avg_cost": 141.50},
+        {"cpt_code": "71046", "category": "Radiology", "avg_cost": 318.00},
+        {"cpt_code": "93000", "category": "Cardiology", "avg_cost": 82.00}
+      ],
+      "upstream": ["stg_procedures"],
+      "downstream": ["fact_admissions"],
+      "impact": []
+    },
+    {
+      "id": "dim_date",
+      "layer": "warehouse",
+      "name": "dim_date",
+      "rowCount": 1826,
+      "droppedRows": 0,
+      "lastUpdated": "static",
+      "note": "5-year calendar (2022–2026)",
+      "schema": [
+        {"col": "date_key",      "type": "DATE",    "note": "PK"},
+        {"col": "year",          "type": "INT",     "note": ""},
+        {"col": "quarter",       "type": "INT",     "note": "1–4"},
+        {"col": "month",         "type": "INT",     "note": ""},
+        {"col": "day_of_week",   "type": "INT",     "note": "1=Mon"},
+        {"col": "is_weekend",    "type": "BOOL",    "note": ""},
+        {"col": "is_holiday",    "type": "BOOL",    "note": "US federal holidays"}
+      ],
+      "sampleRows": [
+        {"date_key": "2026-03-11", "quarter": 1, "day_of_week": 3, "is_weekend": false},
+        {"date_key": "2026-01-01", "quarter": 1, "day_of_week": 4, "is_holiday": true}
+      ],
+      "upstream": [],
+      "downstream": ["fact_admissions"],
+      "impact": []
+    },
+    {
+      "id": "fact_admissions",
+      "layer": "warehouse",
+      "name": "fact_admissions",
+      "rowCount": 51420,
+      "droppedRows": 0,
+      "lastUpdated": "2h ago",
+      "note": "readmit_flag computed (30-day window)",
+      "transformationSQL": "INSERT INTO fact_admissions\nSELECT\n  a.admission_id,\n  p.patient_key,\n  a.admit_date,\n  a.discharge_date,\n  a.los_days,\n  a.department,\n  d.icd_code AS primary_icd,\n  di.category AS diagnosis_category,\n  p.charlson_score,\n  -- 30-day readmission flag\n  EXISTS (\n    SELECT 1 FROM stg_admissions a2\n    WHERE a2.patient_key = p.patient_key\n      AND a2.admit_date BETWEEN a.discharge_date\n                             AND a.discharge_date + 30\n      AND a2.admission_id != a.admission_id\n  ) AS readmit_flag\nFROM stg_admissions a\nJOIN dim_patient p ON a.patient_key = p.patient_key\nJOIN stg_diagnoses d ON a.admission_id = d.admission_id AND d.diagnosis_seq = 1\nJOIN dim_diagnosis di ON d.icd_code = di.icd_code\nJOIN dim_date dd ON a.admit_date = dd.date_key",
+      "schema": [
+        {"col": "admission_id",       "type": "VARCHAR", "note": "PK"},
+        {"col": "patient_key",        "type": "VARCHAR", "note": "FK → dim_patient"},
+        {"col": "admit_date",         "type": "DATE",    "note": "FK → dim_date"},
+        {"col": "los_days",           "type": "INT",     "note": ""},
+        {"col": "department",         "type": "VARCHAR", "note": ""},
+        {"col": "diagnosis_category", "type": "VARCHAR", "note": "CCS category"},
+        {"col": "charlson_score",     "type": "INT",     "note": "Denormalized"},
+        {"col": "readmit_flag",       "type": "BOOL",    "note": "30-day readmission"},
+        {"col": "readmit_rate_30d",   "type": "NUMERIC", "note": "Rolling window rate"}
+      ],
+      "sampleRows": [
+        {"admission_id": "A-0001", "los_days": 3, "charlson_score": 4, "readmit_flag": false},
+        {"admission_id": "A-0002", "los_days": 5, "charlson_score": 1, "readmit_flag": true},
+        {"admission_id": "A-0003", "los_days": 0, "charlson_score": 7, "readmit_flag": false}
+      ],
+      "upstream": ["stg_admissions", "dim_patient", "dim_diagnosis", "dim_date"],
+      "downstream": ["mart_dashboard", "mart_risk_features", "fact_predictions"],
+      "impact": [
+        "⚠ ML scoring will use stale data",
+        "⚠ Dashboard KPIs (readmission rate, LOS) will freeze",
+        "⚠ 1,384 patients won't be scored until next run"
+      ]
+    },
+    {
+      "id": "fact_vitals",
+      "layer": "warehouse",
+      "name": "fact_vitals",
+      "rowCount": 298400,
+      "droppedRows": 0,
+      "lastUpdated": "2h ago",
+      "note": "anomaly_flag computed per vital sign",
+      "schema": [
+        {"col": "vital_id",      "type": "UUID",    "note": "PK"},
+        {"col": "admission_id",  "type": "VARCHAR", "note": "FK"},
+        {"col": "vital_type",    "type": "VARCHAR", "note": ""},
+        {"col": "value_numeric", "type": "NUMERIC", "note": ""},
+        {"col": "is_anomaly",    "type": "BOOL",    "note": ""},
+        {"col": "alert_fired",   "type": "BOOL",    "note": "Whether alert was generated"}
+      ],
+      "sampleRows": [
+        {"vital_type": "SpO2", "value_numeric": 88, "is_anomaly": true,  "alert_fired": true},
+        {"vital_type": "HR",   "value_numeric": 88, "is_anomaly": false, "alert_fired": false}
+      ],
+      "upstream": ["stg_vitals"],
+      "downstream": ["mart_risk_features"],
+      "impact": ["If this fails: vital anomaly alerts will not fire for active patients"]
+    },
+
+    {
+      "id": "mart_dashboard",
+      "layer": "mart",
+      "name": "mart_dashboard",
+      "rowCount": null,
+      "note": "Aggregated KPIs — refreshed 2h ago",
+      "lastUpdated": "2h ago",
+      "schema": [
+        {"col": "dept",                "type": "VARCHAR", "note": ""},
+        {"col": "admit_month",         "type": "DATE",    "note": ""},
+        {"col": "total_admissions",    "type": "INT",     "note": ""},
+        {"col": "readmit_rate_30d",    "type": "NUMERIC", "note": ""},
+        {"col": "avg_los_days",        "type": "NUMERIC", "note": ""},
+        {"col": "high_risk_pct",       "type": "NUMERIC", "note": "risk_score > 0.7"}
+      ],
+      "sampleRows": [
+        {"dept": "Cardiology", "total_admissions": 1240, "readmit_rate_30d": 0.14},
+        {"dept": "Nephrology", "total_admissions": 870,  "readmit_rate_30d": 0.18}
+      ],
+      "upstream": ["fact_admissions"],
+      "downstream": ["api_endpoints"],
+      "impact": ["Dashboard KPIs unavailable"]
+    },
+    {
+      "id": "mart_dept_performance",
+      "layer": "mart",
+      "name": "mart_dept_performance",
+      "rowCount": null,
+      "note": "Department benchmarks — refreshed 2h ago",
+      "lastUpdated": "2h ago",
+      "schema": [
+        {"col": "department",        "type": "VARCHAR", "note": ""},
+        {"col": "benchmark_los",     "type": "NUMERIC", "note": "National average"},
+        {"col": "benchmark_readmit", "type": "NUMERIC", "note": ""},
+        {"col": "dept_los",          "type": "NUMERIC", "note": ""},
+        {"col": "dept_readmit",      "type": "NUMERIC", "note": ""},
+        {"col": "vs_benchmark",      "type": "NUMERIC", "note": "Delta"}
+      ],
+      "sampleRows": [
+        {"department": "Cardiology", "dept_los": 4.2, "benchmark_los": 3.9, "vs_benchmark": 0.3}
+      ],
+      "upstream": ["fact_admissions"],
+      "downstream": ["api_endpoints"],
+      "impact": ["Department performance tab will show stale data"]
+    },
+    {
+      "id": "mart_risk_features",
+      "layer": "mart",
+      "name": "mart_risk_features",
+      "rowCount": 51420,
+      "note": "ML feature matrix — 42 features per admission",
+      "lastUpdated": "2h ago",
+      "schema": [
+        {"col": "admission_id",        "type": "VARCHAR", "note": "PK"},
+        {"col": "age_years",           "type": "INT",     "note": ""},
+        {"col": "charlson_score",      "type": "INT",     "note": ""},
+        {"col": "los_days",            "type": "INT",     "note": ""},
+        {"col": "num_diagnoses",       "type": "INT",     "note": ""},
+        {"col": "num_procedures",      "type": "INT",     "note": ""},
+        {"col": "has_vital_anomaly",   "type": "BOOL",    "note": "Any anomaly during stay"},
+        {"col": "prior_admissions_12m","type": "INT",     "note": "Feature engineered"}
+      ],
+      "sampleRows": [
+        {"admission_id": "A-0001", "age_years": 67, "charlson_score": 4, "num_diagnoses": 3},
+        {"admission_id": "A-0002", "age_years": 54, "charlson_score": 1, "num_diagnoses": 2}
+      ],
+      "upstream": ["fact_admissions", "dim_patient", "fact_vitals"],
+      "downstream": ["xgboost_model"],
+      "impact": ["If this fails: ML model cannot score new admissions"]
+    },
+
+    {
+      "id": "xgboost_model",
+      "layer": "ml",
+      "name": "XGBoost Model v1.0",
+      "rowCount": null,
+      "note": "AUC: 0.84 · Trained 2024-10-01",
+      "lastUpdated": "trained 2024-10-01",
+      "schema": [
+        {"col": "admission_id",  "type": "VARCHAR", "note": "PK"},
+        {"col": "risk_score",    "type": "NUMERIC", "note": "0–1 probability"},
+        {"col": "risk_tier",     "type": "VARCHAR", "note": "low/medium/high/critical"},
+        {"col": "top_features",  "type": "JSONB",   "note": "SHAP top-3 drivers"},
+        {"col": "scored_at",     "type": "TIMESTAMP","note": ""}
+      ],
+      "sampleRows": [
+        {"admission_id": "A-0001", "risk_score": 0.82, "risk_tier": "high"},
+        {"admission_id": "A-0002", "risk_score": 0.23, "risk_tier": "low"},
+        {"admission_id": "A-0003", "risk_score": 0.95, "risk_tier": "critical"}
+      ],
+      "upstream": ["mart_risk_features"],
+      "downstream": ["fact_predictions"],
+      "impact": ["Readmission risk scores unavailable", "Risk Queue will show stale scores"]
+    },
+    {
+      "id": "assoc_rules",
+      "layer": "ml",
+      "name": "Association Rules",
+      "rowCount": 847,
+      "note": "847 rules · mined 2024-10-05 · min support 0.01",
+      "lastUpdated": "mined 2024-10-05",
+      "schema": [
+        {"col": "rule_id",     "type": "INT",     "note": "PK"},
+        {"col": "antecedent",  "type": "JSONB",   "note": "Diagnosis/procedure set"},
+        {"col": "consequent",  "type": "JSONB",   "note": "Recommended intervention"},
+        {"col": "support",     "type": "NUMERIC", "note": ""},
+        {"col": "confidence",  "type": "NUMERIC", "note": ""},
+        {"col": "lift",        "type": "NUMERIC", "note": ""}
+      ],
+      "sampleRows": [
+        {"antecedent": ["I50.9","E11.9"], "consequent": ["Cardiology consult"], "confidence": 0.74}
+      ],
+      "upstream": ["fact_admissions"],
+      "downstream": ["api_endpoints"],
+      "impact": ["Care pathway recommendations unavailable"]
+    },
+    {
+      "id": "patient_clusters",
+      "layer": "ml",
+      "name": "Patient Clusters (k=8)",
+      "rowCount": 8,
+      "note": "UMAP projected · 8 cohorts",
+      "lastUpdated": "mined 2024-10-05",
+      "schema": [
+        {"col": "cluster_id",   "type": "INT",     "note": "0–7"},
+        {"col": "label",        "type": "VARCHAR", "note": "e.g. 'Elderly Cardio'"},
+        {"col": "size",         "type": "INT",     "note": "Number of patients"},
+        {"col": "avg_risk",     "type": "NUMERIC", "note": "Mean risk score"},
+        {"col": "top_dx",       "type": "JSONB",   "note": "Most common diagnoses"}
+      ],
+      "sampleRows": [
+        {"cluster_id": 0, "label": "Elderly Cardiac", "size": 1847, "avg_risk": 0.72},
+        {"cluster_id": 1, "label": "Young Complex DM", "size": 934, "avg_risk": 0.41}
+      ],
+      "upstream": ["mart_risk_features"],
+      "downstream": ["api_endpoints"],
+      "impact": ["Cohort analysis tab unavailable"]
+    },
+
+    {
+      "id": "fact_predictions",
+      "layer": "output",
+      "name": "fact_predictions",
+      "rowCount": 1384,
+      "note": "Scored 2h ago · current active admissions",
+      "lastUpdated": "2h ago",
+      "schema": [
+        {"col": "admission_id",  "type": "VARCHAR", "note": "PK, FK → fact_admissions"},
+        {"col": "risk_score",    "type": "NUMERIC", "note": "0–1"},
+        {"col": "risk_tier",     "type": "VARCHAR", "note": ""},
+        {"col": "top_features",  "type": "JSONB",   "note": "SHAP explanations"},
+        {"col": "scored_at",     "type": "TIMESTAMP","note": ""},
+        {"col": "model_version", "type": "VARCHAR", "note": "v1.0"}
+      ],
+      "sampleRows": [
+        {"admission_id": "A-0001", "risk_score": 0.82, "risk_tier": "high",     "model_version": "v1.0"},
+        {"admission_id": "A-0003", "risk_score": 0.95, "risk_tier": "critical", "model_version": "v1.0"}
+      ],
+      "upstream": ["xgboost_model", "fact_admissions"],
+      "downstream": ["api_endpoints"],
+      "impact": ["Risk Queue will not update", "Clinicians cannot see current risk scores"]
+    },
+    {
+      "id": "care_path_rules",
+      "layer": "output",
+      "name": "care_path_rules",
+      "rowCount": 847,
+      "note": "Serving via recommendations API",
+      "lastUpdated": "static",
+      "schema": [
+        {"col": "rule_id",    "type": "INT",     "note": "PK"},
+        {"col": "antecedent", "type": "JSONB",   "note": ""},
+        {"col": "consequent", "type": "JSONB",   "note": ""},
+        {"col": "confidence", "type": "NUMERIC", "note": ""}
+      ],
+      "sampleRows": [],
+      "upstream": ["assoc_rules"],
+      "downstream": ["api_endpoints"],
+      "impact": []
+    },
+    {
+      "id": "api_endpoints",
+      "layer": "output",
+      "name": "API Endpoints",
+      "rowCount": null,
+      "note": "20 endpoints live · FastAPI",
+      "lastUpdated": "live",
+      "schema": [],
+      "sampleRows": [],
+      "upstream": ["fact_predictions", "care_path_rules", "mart_dashboard", "mart_dept_performance", "assoc_rules", "patient_clusters"],
+      "downstream": [],
+      "impact": ["CareIQ frontend will not function"]
+    }
+  ],
+
+  "edges": [
+    {"id": "e_pat_stg",    "source": "patients_csv",    "target": "stg_patients",        "label": "PII masking + schema validation",      "type": "filter+mask"},
+    {"id": "e_adm_stg",    "source": "admissions_csv",  "target": "stg_admissions",      "label": "LOS derivation + active flag",          "type": "derive"},
+    {"id": "e_dx_stg",     "source": "diagnoses_csv",   "target": "stg_diagnoses",       "label": "ICD-10 validation against reference",   "type": "validate"},
+    {"id": "e_proc_stg",   "source": "procedures_csv",  "target": "stg_procedures",      "label": "Null cost imputation → 0",              "type": "impute"},
+    {"id": "e_vit_stg",    "source": "vitals_csv",      "target": "stg_vitals",          "label": "Out-of-range anomaly flag derivation",  "type": "derive"},
+
+    {"id": "e_stgpat_dim", "source": "stg_patients",    "target": "dim_patient",         "label": "SCD Type 1 + Charlson score computed",  "type": "scd1+derive"},
+    {"id": "e_stgdx_dim",  "source": "stg_diagnoses",   "target": "dim_diagnosis",       "label": "Deduplicate ICD-10 codes + CCS category","type": "deduplicate"},
+    {"id": "e_stgpr_dim",  "source": "stg_procedures",  "target": "dim_procedure",       "label": "Deduplicate CPT codes + avg cost",      "type": "deduplicate"},
+
+    {"id": "e_stgadm_fct", "source": "stg_admissions",  "target": "fact_admissions",     "label": "30-day readmit flag join",               "type": "join+derive"},
+    {"id": "e_dimpt_fct",  "source": "dim_patient",     "target": "fact_admissions",     "label": "Charlson score denormalization",         "type": "denormalize"},
+    {"id": "e_dimdx_fct",  "source": "dim_diagnosis",   "target": "fact_admissions",     "label": "CCS category lookup",                    "type": "lookup"},
+    {"id": "e_dimdt_fct",  "source": "dim_date",        "target": "fact_admissions",     "label": "Date key join",                          "type": "join"},
+    {"id": "e_stgvit_fct", "source": "stg_vitals",      "target": "fact_vitals",         "label": "Anomaly flag passthrough",               "type": "passthrough"},
+
+    {"id": "e_fct_mrt",    "source": "fact_admissions", "target": "mart_dashboard",      "label": "Monthly KPI aggregation",                "type": "aggregate"},
+    {"id": "e_fct_dept",   "source": "fact_admissions", "target": "mart_dept_performance","label": "Dept-level benchmark join",             "type": "aggregate+join"},
+    {"id": "e_fct_rfeat",  "source": "fact_admissions", "target": "mart_risk_features",  "label": "42-feature ML matrix construction",     "type": "feature_engineer"},
+    {"id": "e_dimpt_rfeat","source": "dim_patient",     "target": "mart_risk_features",  "label": "Age + Charlson features",               "type": "feature_engineer"},
+    {"id": "e_fvit_rfeat", "source": "fact_vitals",     "target": "mart_risk_features",  "label": "Vital anomaly features",                "type": "feature_engineer"},
+
+    {"id": "e_rfeat_xgb",  "source": "mart_risk_features","target": "xgboost_model",    "label": "Batch inference — 42 features in",       "type": "inference"},
+    {"id": "e_fct_rules",  "source": "fact_admissions", "target": "assoc_rules",         "label": "Apriori mining (support ≥ 0.01)",        "type": "mine"},
+    {"id": "e_rfeat_clus", "source": "mart_risk_features","target": "patient_clusters",  "label": "KMeans + UMAP projection",               "type": "cluster"},
+
+    {"id": "e_xgb_fpred",  "source": "xgboost_model",   "target": "fact_predictions",   "label": "Risk score + SHAP explanations",         "type": "score"},
+    {"id": "e_fct_fpred",  "source": "fact_admissions",  "target": "fact_predictions",   "label": "Admission context join",                 "type": "join"},
+    {"id": "e_rules_cp",   "source": "assoc_rules",      "target": "care_path_rules",    "label": "Confidence filter ≥ 0.5",               "type": "filter"},
+
+    {"id": "e_fpred_api",  "source": "fact_predictions", "target": "api_endpoints",      "label": "/predictions/ endpoint",                "type": "serve"},
+    {"id": "e_cp_api",     "source": "care_path_rules",  "target": "api_endpoints",      "label": "/recommendations/ endpoint",            "type": "serve"},
+    {"id": "e_mrt_api",    "source": "mart_dashboard",   "target": "api_endpoints",      "label": "/analytics/dashboard endpoint",          "type": "serve"},
+    {"id": "e_dept_api",   "source": "mart_dept_performance","target": "api_endpoints",  "label": "/analytics/department-breakdown",       "type": "serve"},
+    {"id": "e_rules_api",  "source": "assoc_rules",      "target": "api_endpoints",      "label": "/recommendations/rules endpoint",        "type": "serve"},
+    {"id": "e_clus_api",   "source": "patient_clusters", "target": "api_endpoints",      "label": "/recommendations/clusters endpoint",     "type": "serve"},
+    {"id": "e_med_fct",    "source": "medications_csv",  "target": "fact_admissions",    "label": "Medication count features join",         "type": "join"}
+  ]
+}

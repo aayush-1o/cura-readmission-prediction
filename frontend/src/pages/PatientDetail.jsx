@@ -1,14 +1,18 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FileText, User, Calendar, Activity, CheckSquare } from 'lucide-react';
+import {
+    FileText, User, Calendar, Activity, CheckSquare,
+    LogIn, AlertTriangle, Target, TrendingUp, CheckCircle,
+    Bell, Eye, Plus, Pill, LogOut, RefreshCw, Clock,
+} from 'lucide-react';
 import { format } from 'date-fns';
 import RiskBadge from '../design-system/components/RiskBadge.jsx';
 import { usePatient, useCarePlan } from '../services/hooks.js';
 import { mockCarePlan } from '../services/mockData.js';
 
 /* ─── Tabs ───────────────────────────────────────────────────────────────── */
-const TABS = ['Overview', 'Risk Analysis', 'Admissions', 'Care Plan'];
+const TABS = ['Overview', 'Timeline', 'Risk Analysis', 'Admissions', 'Care Plan'];
 
 /* ─── Inline ShapWaterfall ───────────────────────────────────────────────── */
 function ShapWaterfall({ factors = [] }) {
@@ -270,11 +274,186 @@ export default function PatientDetail() {
                     transition={{ duration: 0.18 }}
                 >
                     {tab === 'Overview'      && <OverviewTab patient={patient} />}
+                    {tab === 'Timeline'      && <TimelineTab patientId={patientId} />}
                     {tab === 'Risk Analysis' && <RiskAnalysisTab carePlan={plan} isLoading={planLoading} />}
                     {tab === 'Admissions'    && <AdmissionsTab patient={patient} />}
                     {tab === 'Care Plan'     && <CarePlanTab carePlan={plan} isLoading={planLoading} signed={signed} onSign={() => setSigned(!signed)} />}
                 </motion.div>
             </AnimatePresence>
+        </div>
+    );
+}
+
+/* ─── Timeline Tab ───────────────────────────────────────────────────────── */
+
+// Event type config: icon component + color
+const EVENT_CONFIG = {
+    admission:                  { Icon: LogIn,         color: 'var(--accent-primary)' },
+    vital_recorded:             { Icon: Activity,      color: 'var(--text-muted)' },
+    vital_anomaly:              { Icon: AlertTriangle, color: 'var(--risk-high)' },
+    risk_score_updated:         { Icon: Target,        color: 'var(--accent-primary)' },
+    risk_score_spike:           { Icon: TrendingUp,    color: 'var(--risk-critical)' },
+    care_plan_created:          { Icon: FileText,      color: 'var(--risk-low)' },
+    recommendation_acknowledged:{ Icon: CheckCircle,  color: 'var(--risk-low)' },
+    alert_triggered:            { Icon: Bell,          color: 'var(--risk-high)' },
+    clinician_viewed:           { Icon: Eye,           color: 'var(--text-muted)' },
+    diagnosis_added:            { Icon: Plus,          color: 'var(--accent-primary)' },
+    medication_changed:         { Icon: Pill,          color: 'var(--risk-medium)' },
+    discharge:                  { Icon: LogOut,        color: 'var(--risk-low)' },
+    readmission:                { Icon: RefreshCw,     color: 'var(--risk-critical)' },
+};
+
+// Static events matching DB seed (newest first)
+const MOCK_EVENTS = [
+    { id: 'e01', event_at: '2026-03-11T09:15:00', event_type: 'risk_score_spike',    title: 'Risk Score Spike Detected',  subtitle: 'Score jumped 82% → 95% (↑13%)', detail: { 'Triggered by': 'Nightly ML batch scoring', 'Model': 'XGBoost v1.0', 'Previous': '82%', 'New': '95%' } },
+    { id: 'e02', event_at: '2026-03-11T09:15:00', event_type: 'alert_triggered',     title: 'Alert Triggered',             subtitle: '"Risk Score Spike" — sent to Care Coordinator queue', detail: { 'Alert type': 'risk_score_spike', 'Severity': 'Critical', 'Sent to': 'Care Coordinator queue' } },
+    { id: 'e03', event_at: '2026-03-11T08:00:00', event_type: 'vital_anomaly',       title: 'Vital Anomaly Detected',      subtitle: 'SpO₂ 94% — below threshold (< 95%)', detail: { 'HR': '98 bpm', 'BP': '142/88', 'SpO₂': '94%  ⚠ Below threshold', 'Temp': '98.7°F' } },
+    { id: 'e04', event_at: '2026-03-11T08:00:00', event_type: 'vital_recorded',      title: 'Vitals Recorded',             subtitle: 'HR 98 bpm · BP 142/88 · SpO₂ 94%', detail: { 'HR': '98 bpm', 'BP': '142/88', 'SpO₂': '94%', 'Temp': '98.7°F' } },
+    { id: 'e05', event_at: '2026-03-11T07:45:00', event_type: 'clinician_viewed',    title: 'Patient Record Viewed',       subtitle: 'Dr. Sarah Chen reviewed full profile', detail: { 'Actor': 'Dr. Sarah Chen', 'Duration': '312 seconds', 'Sections': 'Overview, Risk Analysis, Care Plan' } },
+    { id: 'e06', event_at: '2026-03-11T07:30:00', event_type: 'medication_changed',  title: 'Medication Order Updated',    subtitle: 'Furosemide 40mg IV — added', detail: { 'Medication': 'Furosemide 40mg', 'Route': 'IV', 'Frequency': 'BID', 'Reason': 'Fluid overload management', 'Ordered by': 'Dr. Sarah Chen' } },
+    { id: 'e07', event_at: '2026-03-10T14:30:00', event_type: 'recommendation_acknowledged', title: 'Care Plan Action Completed', subtitle: 'Recommendation #1 marked complete', detail: { 'Item': 'Arrange home health follow-up', 'Note': 'Home health arranged for discharge (est. Mar 14)', 'Acknowledged by': 'Dr. Sarah Chen' } },
+    { id: 'e08', event_at: '2026-03-10T11:00:00', event_type: 'vital_recorded',      title: 'Vitals Recorded',             subtitle: 'HR 91 bpm · BP 138/84 · SpO₂ 96%', detail: { 'HR': '91 bpm', 'BP': '138/84', 'SpO₂': '96%', 'Temp': '99.1°F' } },
+    { id: 'e09', event_at: '2026-03-10T10:00:00', event_type: 'diagnosis_added',     title: 'Secondary Diagnosis Added',   subtitle: 'Acute kidney injury (N17.9) — moderate', detail: { 'ICD-10': 'N17.9', 'Description': 'Acute kidney injury, unspecified', 'Severity': 'Moderate', 'Creatinine': '1.8 mg/dL', 'Added by': 'Dr. Sarah Chen' } },
+    { id: 'e10', event_at: '2026-03-10T06:00:00', event_type: 'risk_score_updated',  title: 'Risk Score Updated',          subtitle: 'Score: 78% → 82% (↑4%)', detail: { 'Previous': '78%', 'New': '82%', 'Delta': '+4%', 'Model': 'XGBoost v1.0', 'Job': 'ml_batch_scoring_20260310' } },
+    { id: 'e11', event_at: '2026-03-09T16:00:00', event_type: 'care_plan_created',   title: 'Care Plan Generated',         subtitle: '5 evidence-based recommendations created', detail: { 'Recommendations': '5', 'Model': 'XGBoost v1.0', 'Cohort': 'CHF + AKI — High Risk', 'Generation time': '342ms' } },
+    { id: 'e12', event_at: '2026-03-09T15:00:00', event_type: 'risk_score_updated',  title: 'Initial Risk Score Computed', subtitle: 'Score: 71% · Risk tier: HIGH', detail: { 'Score': '71%', 'Risk tier': 'HIGH', 'Cohort': 'T4_CHF_AKI_High', 'Model': 'XGBoost v1.0' } },
+    { id: 'e13', event_at: '2026-03-09T14:30:00', event_type: 'vital_recorded',      title: 'Admission Vitals Recorded',   subtitle: 'HR 104 bpm · BP 158/96 · SpO₂ 90%', detail: { 'HR': '104 bpm', 'BP': '158/96', 'SpO₂': '90%', 'Temp': '99.8°F', 'Recorded by': 'Admissions nursing' } },
+    { id: 'e14', event_at: '2026-03-09T14:00:00', event_type: 'admission',           title: 'Patient Admitted',             subtitle: 'Cardiology · CHF Exacerbation', detail: { 'Department': 'Cardiology', 'Type': 'Emergency', 'Primary diagnosis': 'CHF Exacerbation', 'ICD-10': 'I50.30', 'Provider': 'Dr. Sarah Chen', 'Initial risk estimate': '71%' } },
+];
+
+// Group events by calendar day
+function groupByDay(events) {
+    const groups = [];
+    let currentDate = null;
+    let currentGroup = null;
+    for (const e of events) {
+        const day = e.event_at.slice(0, 10);
+        if (day !== currentDate) {
+            currentDate = day;
+            currentGroup = { date: day, events: [] };
+            groups.push(currentGroup);
+        }
+        currentGroup.events.push(e);
+    }
+    return groups;
+}
+
+function dayLabel(dateStr) {
+    const today     = '2026-03-11';
+    const yesterday = '2026-03-10';
+    if (dateStr === today)     return 'TODAY — March 11, 2026';
+    if (dateStr === yesterday) return 'YESTERDAY — March 10, 2026';
+    const d = new Date(dateStr + 'T00:00:00');
+    return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }).toUpperCase();
+}
+
+function TimelineTab() {
+    const [expanded, setExpanded] = useState({});
+    const toggle = (id) => setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
+    const groups = groupByDay(MOCK_EVENTS);
+
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+            {/* Info banner */}
+            <div style={{ padding: '10px 14px', background: 'var(--accent-light)', border: '1px solid var(--accent-mid)', borderRadius: 'var(--radius-md)', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Clock size={13} style={{ color: 'var(--accent-primary)', flexShrink: 0 }} />
+                <p style={{ fontSize: 12, color: 'var(--accent-primary)' }}>
+                    <strong>Patient event timeline</strong> — every admission, vital reading, risk score change, alert, and care plan action in chronological order. Click any event to expand details.
+                </p>
+            </div>
+
+            {/* Timeline */}
+            <div style={{ position: 'relative', paddingLeft: 32 }}>
+                {/* Vertical connector line */}
+                <div style={{ position: 'absolute', left: 12, top: 0, bottom: 0, width: 1, background: 'var(--border-subtle)' }} />
+
+                {groups.map(group => (
+                    <div key={group.date}>
+                        {/* Day group header */}
+                        <div style={{ position: 'relative', padding: '14px 0 10px' }}>
+                            <span style={{
+                                fontSize: 10.5, fontWeight: 700, letterSpacing: '0.07em',
+                                textTransform: 'uppercase', color: 'var(--text-muted)',
+                                fontFamily: "'DM Mono', monospace",
+                                background: 'var(--bg-base)', paddingRight: 12,
+                                position: 'relative', zIndex: 1,
+                            }}>
+                                {dayLabel(group.date)}
+                            </span>
+                        </div>
+
+                        {/* Events */}
+                        {group.events.map((event) => {
+                            const cfg = EVENT_CONFIG[event.event_type] || { Icon: Activity, color: 'var(--text-muted)' };
+                            const { Icon, color } = cfg;
+                            const isOpen = !!expanded[event.id];
+                            const time = event.event_at.slice(11, 16);
+
+                            return (
+                                <div
+                                    key={event.id}
+                                    style={{ position: 'relative', paddingLeft: 28, paddingBottom: 18 }}
+                                >
+                                    {/* Icon dot on the line */}
+                                    <div style={{
+                                        position: 'absolute', left: -9,
+                                        width: 20, height: 20,
+                                        background: 'var(--bg-elevated)',
+                                        border: `2px solid ${color}`,
+                                        borderRadius: '50%',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        zIndex: 1,
+                                    }}>
+                                        <Icon size={9} style={{ color }} />
+                                    </div>
+
+                                    {/* Content */}
+                                    <div
+                                        onClick={() => toggle(event.id)}
+                                        style={{
+                                            background: 'var(--bg-elevated)',
+                                            border: `1px solid ${isOpen ? color + '44' : 'var(--border-subtle)'}`,
+                                            borderRadius: 'var(--radius-md)',
+                                            padding: '10px 14px',
+                                            cursor: 'pointer',
+                                            transition: 'all var(--t-fast)',
+                                            boxShadow: isOpen ? `0 0 0 2px ${color}18` : 'none',
+                                        }}
+                                    >
+                                        {/* Title row */}
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                            <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10.5, color: 'var(--text-muted)', flexShrink: 0 }}>{time}</span>
+                                            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', flex: 1 }}>{event.title}</span>
+                                            <span style={{ fontSize: 10, color: 'var(--text-muted)', padding: '1px 7px', background: 'var(--bg-sunken)', borderRadius: 99, border: '1px solid var(--border-subtle)', fontFamily: "'DM Mono', monospace", flexShrink: 0 }}>
+                                                {event.event_type.replace(/_/g, ' ')}
+                                            </span>
+                                        </div>
+
+                                        {/* Subtitle */}
+                                        {event.subtitle && (
+                                            <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 3, marginLeft: 52 }}>
+                                                {event.subtitle}
+                                            </p>
+                                        )}
+
+                                        {/* Expanded detail */}
+                                        {isOpen && event.detail && (
+                                            <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: 6, marginLeft: 52 }}>
+                                                {Object.entries(event.detail).map(([k, v]) => (
+                                                    <div key={k} style={{ display: 'flex', gap: 10, alignItems: 'baseline' }}>
+                                                        <span style={{ fontSize: 10.5, color: 'var(--text-muted)', width: 120, flexShrink: 0 }}>{k}</span>
+                                                        <span style={{ fontSize: 12, color: 'var(--text-primary)', fontFamily: ['HR','BP','SpO₂','Temp','Creatinine','Score','New','Previous','Delta'].includes(k) ? "'DM Mono', monospace" : 'inherit' }}>{v}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                ))}
+            </div>
         </div>
     );
 }

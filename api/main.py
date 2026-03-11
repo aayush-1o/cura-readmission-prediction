@@ -42,7 +42,9 @@ from slowapi.util import get_remote_address
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from api.cache import init_redis, close_redis, redis_ping
-from api.routers import analytics, auth, patients, predictions, recommendations
+from api.middleware.audit import AuditMiddleware
+from api.routers import analytics, auth, patients, predictions, recommendations, data_platform, alerts
+from api.routers import timeline, reports
 from warehouse.db import check_connection
 
 logger = logging.getLogger(__name__)
@@ -356,11 +358,15 @@ async def root() -> dict:
 
 PREFIX = f"/api/{API_VERSION}"
 
-app.include_router(auth.router,            prefix="/auth",                    tags=["Authentication"])
-app.include_router(patients.router,        prefix=f"{PREFIX}/patients",       tags=["Patients"])
-app.include_router(predictions.router,     prefix=f"{PREFIX}/predictions",    tags=["Predictions"])
-app.include_router(recommendations.router, prefix=f"{PREFIX}/recommendations", tags=["Recommendations"])
-app.include_router(analytics.router,       prefix=f"{PREFIX}/analytics",      tags=["Analytics"])
+app.include_router(auth.router,            prefix="/auth",                      tags=["Authentication"])
+app.include_router(patients.router,        prefix=f"{PREFIX}/patients",         tags=["Patients"])
+app.include_router(predictions.router,     prefix=f"{PREFIX}/predictions",      tags=["Predictions"])
+app.include_router(recommendations.router, prefix=f"{PREFIX}/recommendations",  tags=["Recommendations"])
+app.include_router(analytics.router,       prefix=f"{PREFIX}/analytics",        tags=["Analytics"])
+app.include_router(data_platform.router,   prefix=f"{PREFIX}/data-platform",    tags=["Data Platform"])
+app.include_router(alerts.router,          prefix=f"{PREFIX}/alerts",           tags=["Alerts"])
+app.include_router(timeline.router,        prefix=f"{PREFIX}",                  tags=["Timeline", "Audit"])
+app.include_router(reports.router,         prefix=f"{PREFIX}",                  tags=["Reports"])
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Logging configuration
