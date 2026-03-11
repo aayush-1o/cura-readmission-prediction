@@ -1,0 +1,492 @@
+version: "3.9"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CareIQ — Production Docker Compose
+# Usage: docker-compose up -d
+# Dev override: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+# ═══════════════════════════════════════════════════════════════════════════════
+
+networks:
+  # Tier 1: data plane — only internal services
+  data_net:
+    driver: bridge
+    internal: true
+  # Tier 2: app plane — api talks to data_net + app_net
+  app_net:
+    driver: bridge
+  # Tier 3: public plane — nginx + frontend
+  public_net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  airflow_logs:
+    driver: local
+  airflow_plugins:
+    driver: local
+  mlflow_artifacts:
+    driver: local
+  metabase_data:
+    driver: local
+  pgadmin_data:
+    driver: local
+  nginx_certs:
+    driver: local
+  model_artifacts:
+    driver: local
+
+# ─── Shared Airflow config ────────────────────────────────────────────────────
+x-airflow-common: &airflow-common
+  image: apache/airflow:2.8.1-python3.11
+  restart: unless-stopped
+  environment: &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
+    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
+    AIRFLOW__CELERY__BROKER_URL: redis://:@redis:6379/0
+    AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY}
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.basic_auth
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
+    AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_WEBSERVER_SECRET_KEY:-changeme_in_production}
+    AIRFLOW__CORE__DEFAULT_TIMEZONE: UTC
+    AIRFLOW__LOGGING__LOGGING_LEVEL: WARNING
+    _PIP_ADDITIONAL_REQUIREMENTS: "mlflow pandas scikit-learn xgboost mlxtend"
+  volumes:
+    - ./etl/dags:/opt/airflow/dags/careiq:ro
+    - airflow_logs:/opt/airflow/logs
+    - airflow_plugins:/opt/airflow/plugins
+    - ./data:/opt/airflow/data:ro
+    - model_artifacts:/opt/airflow/models
+  user: "${AIRFLOW_UID:-50000}:0"
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  networks:
+    - data_net
+    - app_net
+  deploy:
+    resources:
+      limits:
+        memory: 1G
+        cpus: "1.0"
+
+services:
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # PostgreSQL 16 — Primary data warehouse
+  # ─────────────────────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: careiq_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --locale=en_US.UTF-8"
+      # Performance tuning for a data warehouse workload
+      POSTGRES_EXTRA_OPTS: >-
+        -c shared_buffers=256MB -c effective_cache_size=768MB -c work_mem=16MB -c maintenance_work_mem=64MB -c checkpoint_completion_target=0.9 -c random_page_cost=1.1
+    command: >
+      postgres
+        -c shared_buffers=256MB
+        -c effective_cache_size=768MB
+        -c work_mem=16MB
+        -c maintenance_work_mem=64MB
+        -c checkpoint_completion_target=0.9
+        -c wal_buffers=8MB
+        -c default_statistics_target=100
+        -c max_connections=200
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./warehouse/schema/star_schema.sql:/docker-entrypoint-initdb.d/01_star_schema.sql:ro
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - data_net
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1.0"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Redis 7 — Celery broker + API response cache
+  # ─────────────────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: careiq_redis
+    restart: unless-stopped
+    command: >
+      redis-server
+        --maxmemory 256mb
+        --maxmemory-policy allkeys-lru
+        --save 60 1
+        --loglevel warning
+        --requirepass ${REDIS_PASSWORD:-}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - data_net
+      - app_net
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Airflow — Init (runs once, creates DB tables + admin user)
+  # ─────────────────────────────────────────────────────────────────────────────
+  airflow-init:
+    <<: *airflow-common
+    container_name: careiq_airflow_init
+    restart: "no"
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        airflow db migrate
+        airflow users create \
+          --username ${AIRFLOW_ADMIN_USER:-admin} \
+          --password ${AIRFLOW_ADMIN_PASSWORD:-changeme} \
+          --firstname CareIQ \
+          --lastname Admin \
+          --role Admin \
+          --email admin@careiq.io || true
+        echo "Airflow initialized."
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Airflow — Webserver
+  # ─────────────────────────────────────────────────────────────────────────────
+  airflow-webserver:
+    <<: *airflow-common
+    container_name: careiq_airflow_webserver
+    command: webserver
+    healthcheck:
+      test: [ "CMD", "curl", "--fail", "--silent", "http://localhost:8080/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+    deploy:
+      resources:
+        limits:
+          memory: 1.5G
+          cpus: "1.0"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Airflow — Scheduler
+  # ─────────────────────────────────────────────────────────────────────────────
+  airflow-scheduler:
+    <<: *airflow-common
+    container_name: careiq_airflow_scheduler
+    command: scheduler
+    healthcheck:
+      test: [ "CMD-SHELL", "airflow jobs check --job-type SchedulerJob --hostname \"$(hostname)\"" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1.0"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Airflow — Celery Worker
+  # ─────────────────────────────────────────────────────────────────────────────
+  airflow-worker:
+    <<: *airflow-common
+    container_name: careiq_airflow_worker
+    command: celery worker
+    environment:
+      <<: *airflow-common-env
+      DUMB_INIT_SETSID: "0"
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - 'celery --app airflow.executors.celery_executor.app inspect ping -d "celery@$${HOSTNAME}"'
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "2.0"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # MLflow — Experiment tracking + model registry
+  # ─────────────────────────────────────────────────────────────────────────────
+  mlflow:
+    build:
+      context: ./mlflow
+      dockerfile: Dockerfile
+    container_name: careiq_mlflow
+    restart: unless-stopped
+    environment:
+      MLFLOW_BACKEND_STORE_URI: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
+      MLFLOW_ARTIFACT_ROOT: /mlflow/artifacts
+      MLFLOW_HOST: 0.0.0.0
+      MLFLOW_PORT: 5000
+      MLFLOW_WORKERS: 2
+    volumes:
+      - mlflow_artifacts:/mlflow/artifacts
+      - model_artifacts:/mlflow/models
+    healthcheck:
+      test: [ "CMD", "curl", "--fail", "--silent", "http://localhost:5000/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - data_net
+      - app_net
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # FastAPI — Backend ML API (production: 4 uvicorn workers)
+  # ─────────────────────────────────────────────────────────────────────────────
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+      target: production
+    container_name: careiq_api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-}@redis:6379/1
+      SECRET_KEY: ${SECRET_KEY}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      LOG_LEVEL: ${LOG_LEVEL:-WARNING}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://nginx:80}
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MODEL_ARTIFACTS_PATH: /opt/models
+      RISK_THRESHOLD_HIGH: ${RISK_THRESHOLD_HIGH:-0.65}
+      RISK_THRESHOLD_MEDIUM: ${RISK_THRESHOLD_MEDIUM:-0.35}
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+      WORKERS: ${API_WORKERS:-4}
+    volumes:
+      - model_artifacts:/opt/models:ro
+    healthcheck:
+      test: [ "CMD-SHELL", "curl --fail --silent http://localhost:8000/health || exit 1" ]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 45s
+    networks:
+      - data_net
+      - app_net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mlflow:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "2.0"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # React Frontend — Static build served by nginx (inside container)
+  # ─────────────────────────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: production
+      args:
+        VITE_API_URL: /api
+        VITE_USE_MOCK: "false"
+    container_name: careiq_frontend
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:3000" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - public_net
+    depends_on:
+      api:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: "0.25"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Metabase — BI dashboards (clinical overview)
+  # ─────────────────────────────────────────────────────────────────────────────
+  metabase:
+    image: metabase/metabase:v0.49.4
+    container_name: careiq_metabase
+    restart: unless-stopped
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_DBNAME: ${POSTGRES_DB}
+      MB_DB_PORT: 5432
+      MB_DB_USER: ${POSTGRES_USER}
+      MB_DB_PASS: ${POSTGRES_PASSWORD}
+      MB_DB_HOST: postgres
+      MB_SITE_URL: ${METABASE_SITE_URL:-http://localhost/metabase}
+      MB_EMOJI_IN_LOGS: "false"
+    volumes:
+      - metabase_data:/metabase-data
+    healthcheck:
+      test: [ "CMD", "curl", "--fail", "--silent", "http://localhost:3000/api/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+    networks:
+      - data_net
+      - public_net
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1.0"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # pgAdmin — PostgreSQL Browser UI (dev/admin only)
+  # ─────────────────────────────────────────────────────────────────────────────
+  pgadmin:
+    image: dpage/pgadmin4:8
+    container_name: careiq_pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@careiq.io}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-changeme}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION: "True"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    healthcheck:
+      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:80/misc/ping" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - data_net
+      - public_net
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.25"
+    profiles:
+      - tools # start with: docker-compose --profile tools up
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Nginx — Reverse proxy + TLS termination
+  # Entry point for all external traffic.
+  # ─────────────────────────────────────────────────────────────────────────────
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    container_name: careiq_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - nginx_certs:/etc/nginx/certs:ro
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    healthcheck:
+      test: [ "CMD", "nginx", "-t" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - public_net
+      - app_net
+    depends_on:
+      frontend:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: "0.25"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"

@@ -1,0 +1,86 @@
+# ─── Development overrides ────────────────────────────────────────────────────
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+#
+# Key differences from production:
+#   • Source code is bind-mounted for hot-reload
+#   • Debug ports exposed
+#   • ENVIRONMENT=development
+#   • Reduced resource limits
+#   • pgAdmin always on (no profile required)
+#   • Airflow debug ports exposed
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  postgres:
+    ports:
+      - "5432:5432" # expose for local tools (DBeaver, psql)
+
+  redis:
+    ports:
+      - "6379:6379"
+
+  api:
+    build:
+      target: development
+    environment:
+      ENVIRONMENT: development
+      LOG_LEVEL: DEBUG
+      DEBUG: "true"
+      RELOAD: "true"
+      CORS_ORIGINS: "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173"
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload --log-level debug
+    volumes:
+      - ./api:/app:cached
+      - ./ml:/app/ml:cached
+      - model_artifacts:/opt/models
+    ports:
+      - "8000:8000" # direct API access bypassing nginx
+      - "5678:5678" # debugpy remote debug port
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1.0"
+
+  frontend:
+    build:
+      target: development
+      args:
+        VITE_API_URL: http://localhost:8000
+        VITE_USE_MOCK: "false"
+    command: npm run dev -- --host 0.0.0.0 --port 5173
+    volumes:
+      - ./frontend:/app:cached
+      - /app/node_modules # preserve container's node_modules
+    ports:
+      - "5173:5173" # Vite HMR
+      - "24678:24678" # Vite HMR websocket
+    environment:
+      NODE_ENV: development
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"
+
+  mlflow:
+    ports:
+      - "5000:5000"
+
+  airflow-webserver:
+    ports:
+      - "8080:8080"
+
+  metabase:
+    ports:
+      - "3001:3000" # offset to avoid clash with frontend
+
+  pgadmin:
+    profiles: [] # always on in dev (override the 'tools' profile)
+    ports:
+      - "5050:80"
+
+  nginx:
+    ports:
+      - "80:80"

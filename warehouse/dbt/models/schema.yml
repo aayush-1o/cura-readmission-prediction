@@ -1,0 +1,290 @@
+version: 2
+
+sources:
+  - name: staging
+    schema: staging
+    description: "Raw CSVs loaded by the Airflow ETL pipeline into staging.raw_* tables."
+    tables:
+      - name: raw_patients
+        description: "Raw patient demographics from the EHR export."
+      - name: raw_admissions
+        description: "Raw admission records from the EHR export."
+      - name: raw_diagnoses
+        description: "Raw diagnosis codes per admission."
+      - name: raw_procedures
+        description: "Raw procedure codes per admission."
+      - name: raw_vitals
+        description: "Raw vital sign readings."
+      - name: raw_medications
+        description: "Raw medication orders per admission."
+
+models:
+  # ───────────────────────────────────────────────────────────────────────
+  # STAGING LAYER
+  # ───────────────────────────────────────────────────────────────────────
+
+  - name: stg_patients
+    description: "Cleaned patient demographics with standardized age groups, insurance categories, and boolean comorbidity flags."
+    columns:
+      - name: patient_id
+        description: "Anonymized patient business key (HMAC pseudonym from PII masker)."
+        tests:
+          - not_null
+          - unique
+      - name: age
+        description: "Patient age at time of data snapshot."
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 120
+      - name: age_group
+        description: "Age bucketed into 5 groups: 18-30, 31-45, 46-60, 61-75, 76+."
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['18-30', '31-45', '46-60', '61-75', '76+']
+      - name: gender
+        description: "Standardized gender: Male, Female, or Other."
+        tests:
+          - accepted_values:
+              values: ['Male', 'Female', 'Other']
+      - name: insurance_category
+        description: "Simplified insurance into 4 categories: Medicare, Medicaid, Commercial, Other."
+        tests:
+          - accepted_values:
+              values: ['Medicare', 'Medicaid', 'Commercial', 'Other']
+      - name: comorbidity_count
+        description: "Number of chronic comorbidities."
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 20
+
+  - name: stg_admissions
+    description: "Cleaned admissions with standardized types, cast dates, derived LOS, and boolean flags."
+    columns:
+      - name: admission_id
+        description: "Unique admission business key."
+        tests:
+          - not_null
+          - unique
+      - name: patient_id
+        description: "FK to stg_patients.patient_id."
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_patients')
+              field: patient_id
+      - name: admission_date
+        description: "Date patient was admitted."
+        tests:
+          - not_null
+      - name: discharge_date
+        description: "Date patient was discharged. Null if still admitted."
+      - name: length_of_stay_days
+        description: "Days from admission to discharge."
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 365
+      - name: admission_type
+        description: "Standardized to: Emergency, Elective, Urgent."
+        tests:
+          - accepted_values:
+              values: ['Emergency', 'Elective', 'Urgent']
+      - name: readmit_30day_flag
+        description: "Boolean: TRUE if patient was readmitted within 30 days of discharge."
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      - name: icu_days
+        description: "Number of days spent in ICU during this admission."
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 365
+
+  - name: stg_diagnoses
+    description: "Cleaned diagnosis codes with ICD-10 validation and clinical metadata from dim_diagnosis."
+    columns:
+      - name: diagnosis_id
+        description: "Unique diagnosis record ID."
+        tests:
+          - not_null
+          - unique
+      - name: admission_id
+        description: "FK to stg_admissions.admission_id."
+        tests:
+          - not_null
+      - name: icd10_code
+        description: "Uppercase ICD-10-CM code (e.g. I50.9)."
+        tests:
+          - not_null
+      - name: valid_icd10_format
+        description: "TRUE if code matches ICD-10 regex pattern: letter + 2+ digits."
+        tests:
+          - not_null
+      - name: diagnosis_type
+        description: "Standardized: Primary, Secondary, or Discharge."
+        tests:
+          - accepted_values:
+              values: ['Primary', 'Secondary', 'Discharge']
+      - name: sequence_number
+        description: "Position of diagnosis in the coding sequence (1=primary)."
+
+  # ───────────────────────────────────────────────────────────────────────
+  # INTERMEDIATE LAYER
+  # ───────────────────────────────────────────────────────────────────────
+
+  - name: int_patient_history
+    description: "Rolling utilization history per admission — prior admissions, readmissions, ICU stays."
+    columns:
+      - name: admission_id
+        description: "FK to stg_admissions.admission_id."
+        tests:
+          - not_null
+          - unique
+      - name: patient_id
+        tests:
+          - not_null
+      - name: prior_admissions_12m
+        description: "Number of admissions in the 12 months prior to this visit."
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+      - name: prior_admissions_90d
+        description: "Number of admissions in the 90 days prior to this visit."
+        tests:
+          - not_null
+      - name: prior_readmissions_1y
+        description: "Number of 30-day readmissions in the prior year."
+        tests:
+          - not_null
+      - name: high_utilizer_flag
+        description: "TRUE if patient had >= 3 admissions in the prior 12 months."
+        tests:
+          - not_null
+
+  - name: int_comorbidity_scores
+    description: "Charlson Comorbidity Index computed per patient from boolean comorbidity flags."
+    columns:
+      - name: patient_id
+        description: "Patient business key."
+        tests:
+          - not_null
+          - unique
+      - name: charlson_raw
+        description: "Base CCI score (sum of weighted comorbidities, without age component)."
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+      - name: charlson_comorbidity_index
+        description: "Final CCI including age adjustment (+1 per decade above 50)."
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+      - name: cci_risk_tier
+        description: "CCI risk tier: None, Low, Moderate, High."
+        tests:
+          - accepted_values:
+              values: ['None', 'Low', 'Moderate', 'High']
+
+  - name: int_readmission_features
+    description: >
+      Full ML feature set per admission. One row per admission, all numeric/binary features
+      pre-encoded, ready for ml/features.py ingestion.
+      **TARGET COLUMN**: readmit_30day_flag (INT 0/1).
+    columns:
+      - name: admission_id
+        tests:
+          - not_null
+          - unique
+      - name: readmit_30day_flag
+        description: "Target label for the readmission risk model (0=no, 1=yes)."
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1]
+
+  # ───────────────────────────────────────────────────────────────────────
+  # MARTS LAYER
+  # ───────────────────────────────────────────────────────────────────────
+
+  - name: mart_readmission_dashboard
+    description: "Pre-aggregated readmission metrics by department x month x diagnosis category for BI dashboards and API."
+    columns:
+      - name: period_start
+        description: "First day of the calendar month (e.g. 2024-03-01)."
+        tests:
+          - not_null
+      - name: department_name
+        tests:
+          - not_null
+      - name: total_admissions
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+      - name: readmission_rate_pct
+        description: "Readmission rate as a percentage (0-100)."
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100
+
+  - name: mart_department_performance
+    description: "Monthly department readmission performance vs benchmark with MoM trajectory, rolling average, and CMS star rating."
+    columns:
+      - name: department_name
+        tests:
+          - not_null
+      - name: period_start
+        tests:
+          - not_null
+      - name: readmission_rate
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 1
+      - name: cms_star_rating
+        description: "Approximated CMS star rating (1-5, 5=best)."
+        tests:
+          - accepted_values:
+              values: [1, 2, 3, 4, 5]
+      - name: performance_label
+        tests:
+          - accepted_values:
+              values: ['Outperforming', 'On Target', 'Underperforming']
+
+  - name: mart_patient_risk_cohorts
+    description: "Patient risk cohort assignments (T1-T4) based on CCI, utilization, and readmission history."
+    columns:
+      - name: patient_id
+        tests:
+          - not_null
+          - unique
+      - name: risk_cohort
+        description: "Assigned risk cohort: T1_CatastrophicRisk, T2_HighRisk, T3_ModerateRisk, T4_LowRisk."
+        tests:
+          - not_null
+          - accepted_values:
+              values:
+                - 'T1_CatastrophicRisk'
+                - 'T2_HighRisk'
+                - 'T3_ModerateRisk'
+                - 'T4_LowRisk'
+      - name: risk_cohort_rank
+        description: "Numeric rank: 1=highest risk, 4=lowest."
+        tests:
+          - accepted_values:
+              values: [1, 2, 3, 4]
+      - name: charlson_comorbidity_index
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0

@@ -1,0 +1,296 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.11"
+  NODE_VERSION: "20"
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  lint-python:
+  # ─────────────────────────────────────────────────────────────────────────────
+    name: Lint Python
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install linting tools
+        run: pip install ruff mypy types-requests
+
+      - name: Ruff lint
+        run: ruff check --output-format=github api/ ml/ monitoring/ scripts/
+
+      - name: Ruff format check
+        run: ruff format --check api/ ml/ monitoring/ scripts/
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  test-python:
+  # ─────────────────────────────────────────────────────────────────────────────
+    name: Test Python (API + ML)
+    runs-on: ubuntu-latest
+    needs: lint-python
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: careiq_test
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: careiq_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    env:
+      DATABASE_URL: postgresql+asyncpg://careiq_test:testpass@localhost/careiq_test
+      REDIS_URL: redis://localhost:6379/1
+      SECRET_KEY: ci_test_secret_key_not_for_production_use
+      ENVIRONMENT: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install API deps
+        run: pip install -r api/requirements.txt pytest pytest-asyncio pytest-cov httpx
+
+      - name: Install ML deps
+        run: pip install -r ml/requirements.txt
+
+      - name: Run API tests
+        run: |
+          pytest api/tests/ \
+            -v \
+            --cov=api \
+            --cov-report=term-missing \
+            --cov-report=xml \
+            --cov-fail-under=70
+
+      - name: Run ML tests
+        run: pytest ml/tests/ -v --timeout=120
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          file: coverage.xml
+          flags: python
+          fail_ci_if_error: false
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  lint-frontend:
+  # ─────────────────────────────────────────────────────────────────────────────
+    name: Lint Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: ESLint
+        run: npm run lint
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  test-frontend:
+  # ─────────────────────────────────────────────────────────────────────────────
+    name: Test Frontend
+    runs-on: ubuntu-latest
+    needs: lint-frontend
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test -- --run --coverage
+
+      - name: Build production bundle
+        run: npm run build
+        env:
+          VITE_API_URL: /api
+          VITE_USE_MOCK: "false"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  build-docker:
+  # ─────────────────────────────────────────────────────────────────────────────
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    needs: [test-python, test-frontend]
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata (API)
+        id: api-meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-api
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix=sha-
+
+      - name: Build and push API image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./api
+          target: production
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.api-meta.outputs.tags }}
+          labels: ${{ steps.api-meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Extract Docker metadata (frontend)
+        id: fe-meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-frontend
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix=sha-
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          target: production
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.fe-meta.outputs.tags }}
+          labels: ${{ steps.fe-meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VITE_API_URL=/api
+            VITE_USE_MOCK=false
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  integration-test:
+  # ─────────────────────────────────────────────────────────────────────────────
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: build-docker
+    if: github.event_name != 'pull_request'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy example env
+        run: |
+          cp .env.example .env
+          # Override with CI-safe values
+          echo "SECRET_KEY=ci_integration_test_secret_key_not_for_prod" >> .env
+          echo "POSTGRES_PASSWORD=cipassword123" >> .env
+          echo "AIRFLOW_FERNET_KEY=$(python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")" >> .env
+
+      - name: Start core services
+        run: |
+          docker compose up -d postgres redis api
+          echo "Waiting for services to become healthy..."
+          timeout 120 bash -c 'until docker compose ps api | grep -q "healthy"; do sleep 5; done'
+
+      - name: Run smoke tests
+        run: |
+          API=http://localhost:8000
+
+          # Health check
+          response=$(curl -sf $API/health)
+          echo "Health: $response"
+          echo "$response" | grep -q '"status"' || (echo "Health check failed" && exit 1)
+
+          # Login
+          token=$(curl -sf -X POST $API/auth/login \
+            -H "Content-Type: application/json" \
+            -d '{"email":"analyst@careiq.io","password":"CareIQ-Demo-2024!"}' | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+
+          [ -n "$token" ] || (echo "Login failed" && exit 1)
+          echo "Login OK — got token"
+
+          # Analytics dashboard
+          curl -sf -H "Authorization: Bearer $token" $API/api/v1/analytics/dashboard | python3 -c "import sys,json; d=json.load(sys.stdin); assert 'total_admissions_30d' in d" || (echo "Dashboard KPIs failed" && exit 1)
+          echo "Dashboard API OK"
+
+          # Patients list
+          curl -sf -H "Authorization: Bearer $token" "$API/api/v1/patients?page=1&page_size=5" | python3 -c "import sys,json; d=json.load(sys.stdin); assert 'data' in d" || (echo "Patients API failed" && exit 1)
+          echo "Patients API OK"
+
+          echo "✅ All smoke tests passed"
+
+      - name: Print docker logs on failure
+        if: failure()
+        run: docker compose logs --tail=50 api postgres
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
