@@ -106,6 +106,57 @@ UI to browse current DB schema, view migration history, and diff schema versions
 
 ---
 
+## 🖼️ Screenshots
+
+### Clinical Dashboard
+> KPI tiles · 30-day readmission trend vs CMS 15% benchmark · risk distribution by tier
+
+![Dashboard](docs/screenshots/dashboard.png)
+
+---
+
+### Risk Queue
+> Patients sorted by predicted readmission risk · SHAP top factors · care plan actions
+
+![Risk Queue](docs/screenshots/risk-queue.png)
+
+---
+
+### Analytics & Performance
+> Readmission trends by department · benchmark alerts · summary stats row
+
+![Analytics](docs/screenshots/analytics.png)
+
+---
+
+### Data Platform — Pipeline Observability
+> Live pipeline status (EHR ingest, dbt, ML scoring) · DQ scores · run history
+
+![Data Platform](docs/screenshots/data-platform.png)
+
+---
+
+### Data Platform — Schema Registry
+> Browse all 12 warehouse tables · column types, nullability, indexes, sample values · migration history
+
+![Schema Registry](docs/screenshots/schema.png)
+
+---
+
+### Data Platform — Data Lineage Graph
+> Interactive DAG: CSV sources → staging → warehouse → ML models → API endpoints · click any node for details
+
+![Lineage Explorer](docs/screenshots/lineage.png)
+
+---
+
+### Audit Log
+> Append-only HIPAA-style access trail · every patient data access permanently recorded · Export CSV
+
+![Audit Log](docs/screenshots/audit-log.png)
+
+---
+
 ## 🏛️ Architecture
 
 ```
