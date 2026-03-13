@@ -1,0 +1,49 @@
+## render.yaml — CareIQ Render.com Blueprint
+## Deploy with: connect repo on render.com/new → "Blueprint" → pick this file
+## ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  # ── FastAPI Backend ──────────────────────────────────────────────────────────
+  - type: web
+    name: careiq-api
+    runtime: docker
+    dockerfilePath: ./api/Dockerfile
+    dockerContext: .            # root context so `warehouse/` package is available
+    dockerCommand: "uvicorn api.main:app --host 0.0.0.0 --port $PORT --workers 1 --log-level info"
+    plan: free
+    region: oregon
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: careiq-postgres
+          property: connectionString
+      - key: REDIS_URL
+        sync: false             # paste your Upstash REDIS_URL manually in dashboard
+      - key: SECRET_KEY
+        generateValue: true     # Render auto-generates a secure random string
+      - key: ENVIRONMENT
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      - key: FRONTEND_ORIGIN
+        value: https://careiq-flax.vercel.app
+      - key: JWT_ALGORITHM
+        value: HS256
+      - key: JWT_EXPIRE_MINUTES
+        value: "60"
+      - key: WORKERS
+        value: "1"              # free tier: 1 worker to stay within RAM limits
+      - key: DB_POOL_SIZE
+        value: "3"
+      - key: DB_POOL_MAX_OVERFLOW
+        value: "5"
+
+databases:
+  # ── PostgreSQL ───────────────────────────────────────────────────────────────
+  - name: careiq-postgres
+    plan: free
+    databaseName: careiq_warehouse
+    user: careiq
+    region: oregon
+    postgresMajorVersion: 16
